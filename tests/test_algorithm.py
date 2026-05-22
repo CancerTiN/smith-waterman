@@ -5,7 +5,7 @@ import unittest
 
 import numpy as np
 
-from algorithm import ScoringScheme, smith_waterman
+from smith_waterman import ScoringScheme, smith_waterman
 
 
 class SmithWatermanTestCase(unittest.TestCase):

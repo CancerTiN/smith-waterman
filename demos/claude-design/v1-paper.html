@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smith–Waterman · 论文版</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f3ecdc;
+    --paper-deep: #e7dec6;
+    --rule: #2a1f12;
+    --rule-soft: #b8a784;
+    --ink: #1c1810;
+    --ink-soft: #463728;
+    --muted: #6b5a42;
+    --oxblood: #7a2418;
+    --oxblood-soft: #b9543b;
+    --indigo: #1f3a5a;
+    --gold: #c08a1e;
+    --gold-soft: #f2dc9b;
+    --leaf: #4a6b2c;
+    --leaf-soft: #d4ddb4;
+    --plum: #5a2649;
+    --serif: "Crimson Pro", "EB Garamond", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.55;
+    font-feature-settings: "onum", "kern";
+    /* very subtle paper grain */
+    background-image:
+      radial-gradient(rgba(70,55,40,0.06) 1px, transparent 1.5px),
+      radial-gradient(rgba(70,55,40,0.04) 1px, transparent 1px);
+    background-size: 7px 7px, 13px 11px;
+    background-position: 0 0, 3px 5px;
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 48px 56px 64px;
+    position: relative;
+  }
+  .page::before, .page::after {
+    content: "";
+    position: absolute;
+    left: 56px; right: 56px;
+    height: 1px;
+    background: var(--rule);
+  }
+  .page::before { top: 36px; }
+  .page::after { display: none; }
+
+  /* ===== MASTHEAD ===== */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: end;
+    padding-top: 18px;
+    padding-bottom: 22px;
+    border-bottom: 2px solid var(--rule);
+    margin-bottom: 4px;
+    position: relative;
+  }
+  .masthead::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    bottom: -7px;
+    height: 1px;
+    background: var(--rule);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  h1.title {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 84px;
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  h1.title em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--oxblood);
+  }
+  .subtitle {
+    margin: 14px 0 0;
+    max-width: 560px;
+    font-style: italic;
+    font-size: 19px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .attribution {
+    margin: 14px 0 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+  .phase-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 8px 14px 8px 28px;
+    background: var(--paper);
+    position: relative;
+    align-self: end;
+    white-space: nowrap;
+  }
+  .phase-badge::before {
+    content: "";
+    position: absolute;
+    left: 12px; top: 50%;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transform: translateY(-50%);
+  }
+  .phase-badge[data-phase="fill"]::before { background: var(--gold); animation: pulse 1.2s ease-in-out infinite; }
+  .phase-badge[data-phase="traceback"]::before { background: var(--oxblood); animation: pulse 0.9s ease-in-out infinite; }
+  .phase-badge[data-phase="done"]::before { background: var(--leaf); }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  /* ===== ABSTRACT ===== */
+  .abstract {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 24px;
+    margin: 22px 0 30px;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .abstract h6 {
+    margin: 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 18px;
+    color: var(--oxblood);
+  }
+  .abstract p {
+    margin: 0;
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    text-wrap: pretty;
+  }
+
+  /* ===== SECTION HEADINGS ===== */
+  .section-head {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    align-items: baseline;
+    margin: 36px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .section-num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 22px;
+    color: var(--oxblood);
+  }
+  .section-name {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    margin: 0;
+  }
+  .section-aside {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    justify-self: end;
+  }
+
+  /* ===== CONTROL ROW ===== */
+  .controls {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 32px;
+    padding: 4px 0 18px;
+  }
+  .field-block { display: grid; gap: 14px; }
+  .seq-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    padding: 6px 0 7px;
+    outline: none;
+    transition: border-color 160ms ease;
+  }
+  input[type="text"]:focus, input[type="number"]:focus {
+    border-bottom-color: var(--oxblood);
+  }
+  input.invalid { border-bottom-color: var(--oxblood); color: var(--oxblood); }
+
+  .scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .speed-block { display: grid; gap: 12px; margin-top: 6px; }
+  .speed-block label { display: flex; justify-content: space-between; align-items: baseline; }
+  .speed-block label span { color: var(--ink); font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: none; }
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    background: transparent;
+    height: 18px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--rule); }
+  input[type="range"]::-moz-range-track { height: 1px; background: var(--rule); }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--paper); border: 1.5px solid var(--oxblood);
+    margin-top: -7px;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--paper); border: 1.5px solid var(--oxblood);
+  }
+
+  .checkbox {
+    display: flex; align-items: center; gap: 9px;
+    font-family: var(--serif); font-size: 15px; font-style: italic;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .checkbox input { width: 14px; height: 14px; accent-color: var(--oxblood); }
+
+  .example-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; margin-top: 2px; }
+  .link-btn {
+    background: transparent; border: 0;
+    font-family: var(--serif); font-style: italic; font-size: 16px;
+    color: var(--oxblood); cursor: pointer; padding: 0;
+    border-bottom: 1px solid var(--oxblood);
+    line-height: 1.2;
+  }
+  .link-btn:hover { color: var(--oxblood-soft); border-bottom-color: var(--oxblood-soft); }
+  .hint { font-family: var(--serif); font-style: italic; font-size: 13.5px; color: var(--muted); }
+
+  .error-box { min-height: 22px; margin-top: 6px; font-family: var(--serif); font-style: italic; color: var(--oxblood); font-size: 14.5px; }
+
+  .button-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 11px 18px;
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    cursor: pointer;
+    transition: all 140ms ease;
+    line-height: 1;
+  }
+  .btn:hover:not(:disabled) { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .btn.primary { background: var(--oxblood); color: var(--paper); border-color: var(--oxblood); }
+  .btn.primary:hover:not(:disabled) { background: #5e1a10; border-color: #5e1a10; }
+  .btn.danger { color: var(--oxblood); border-color: var(--oxblood-soft); }
+  .btn.danger:hover:not(:disabled) { background: var(--oxblood); color: var(--paper); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .ctl-hint { margin-top: 10px; font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--muted); }
+
+  /* ===== MAIN GRID ===== */
+  .work-area {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 36px;
+    align-items: start;
+  }
+
+  /* ===== MATRIX ===== */
+  .matrix-panel { min-width: 0; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 18px;
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { width: 12px; height: 12px; display: inline-block; border: 1px solid var(--rule); }
+  .sw.cur { background: var(--gold-soft); border-color: var(--gold); }
+  .sw.dep { background: var(--paper-deep); }
+  .sw.tr  { background: var(--leaf-soft); border-color: var(--leaf); }
+  .sw.mx  { background: var(--plum); opacity: 0.18; border-color: var(--plum); }
+
+  .matrix-scroll {
+    overflow: auto;
+    border: 1px solid var(--rule);
+    background:
+      repeating-linear-gradient(0deg, transparent 0 27px, rgba(120, 100, 70, 0.04) 27px 28px),
+      var(--paper);
+    padding: 22px 24px;
+  }
+  .matrix-wrap { position: relative; display: inline-block; min-width: 100%; }
+  svg.trace-overlay { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 4; }
+  .trace-overlay line { stroke: var(--oxblood); stroke-width: 2.2; stroke-linecap: round; opacity: 0.85; }
+
+  table.matrix {
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    font-family: var(--mono);
+  }
+  .matrix th, .matrix td {
+    position: relative;
+    width: 48px; min-width: 48px; height: 44px;
+    text-align: center; vertical-align: middle;
+    border-right: 1px solid var(--rule-soft);
+    border-bottom: 1px solid var(--rule-soft);
+    background: transparent;
+    transition: background 200ms ease, color 200ms ease, transform 200ms ease, border-color 200ms ease;
+  }
+  .matrix tr:first-child th, .matrix tr:first-child td { border-top: 1.5px solid var(--rule); }
+  .matrix tr th:first-child, .matrix tr td:first-child { border-left: 1.5px solid var(--rule); }
+  .matrix tr th:last-child, .matrix tr td:last-child { border-right: 1.5px solid var(--rule); }
+  .matrix tr:last-child th, .matrix tr:last-child td { border-bottom: 1.5px solid var(--rule); }
+
+  .matrix th {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-style: italic;
+    font-size: 19px;
+    color: var(--oxblood);
+    background: rgba(231, 222, 198, 0.4);
+  }
+  .matrix th.corner { background: transparent; }
+
+  .matrix td {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--ink);
+  }
+  .matrix td.pending { color: rgba(70,55,40,0.25); font-weight: 400; }
+  .matrix td.initialized { color: var(--muted); background: rgba(231, 222, 198, 0.25); }
+  .matrix td.filled { background: var(--paper); }
+
+  .matrix td.dependency {
+    background: var(--paper-deep);
+  }
+  .matrix th.active-label {
+    background: var(--gold-soft);
+    color: var(--ink);
+  }
+  .matrix td.current {
+    background: var(--gold-soft);
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 0 1px var(--gold);
+    color: var(--ink);
+    z-index: 2;
+  }
+  .matrix td.max-cell {
+    background: rgba(90, 38, 73, 0.13);
+    color: var(--plum);
+    font-weight: 700;
+  }
+  .matrix td.trace-cell {
+    background: var(--leaf-soft);
+    color: var(--ink);
+  }
+  .matrix td.trace-current {
+    box-shadow: inset 0 0 0 2px var(--oxblood);
+    z-index: 3;
+  }
+  .matrix td.stop-cell {
+    background: repeating-linear-gradient(45deg, rgba(122, 36, 24, 0.12) 0 5px, rgba(122, 36, 24, 0.02) 5px 10px);
+    color: var(--oxblood);
+  }
+  .matrix td.flash { animation: paperflash 600ms ease-in-out 2; }
+  @keyframes paperflash {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+  .cell-arrow {
+    position: absolute; right: 4px; bottom: 2px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--oxblood);
+    pointer-events: none;
+  }
+  .cell-star {
+    position: absolute; top: 1px; left: 4px;
+    font-size: 10px; color: var(--plum);
+    pointer-events: none;
+  }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    display: grid;
+    gap: 28px;
+    border-left: 1px solid var(--rule-soft);
+    padding-left: 28px;
+  }
+  .side-block h3 {
+    margin: 0 0 12px;
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .side-block h3 span {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .formula-heading { margin: 0 0 8px; font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 15px; }
+  .formula-heading strong { font-style: normal; font-weight: 600; color: var(--oxblood); }
+  .formula-list { display: grid; gap: 5px; margin-top: 8px; }
+  .formula-line {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    padding: 5px 8px 5px 16px;
+    position: relative;
+    border-left: 1px solid var(--rule-soft);
+  }
+  .formula-line.chosen {
+    color: var(--ink);
+    background: var(--gold-soft);
+    border-left: 2px solid var(--oxblood);
+    font-weight: 600;
+  }
+  .explain {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    text-wrap: pretty;
+  }
+  .explain + .explain { margin-top: 10px; }
+
+  /* ===== PREVIEW ===== */
+  .preview-panel { margin-top: 30px; }
+  .preview-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 12px;
+  }
+  .preview-status {
+    font-family: var(--serif); font-style: italic; font-size: 14.5px; color: var(--muted);
+  }
+  .context-box {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    padding: 14px 18px;
+    background: rgba(231, 222, 198, 0.35);
+    border-left: 2px solid var(--rule);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .context-box .selected {
+    background: var(--gold-soft);
+    color: var(--ink);
+    padding: 1px 3px;
+    border: 1px solid var(--gold);
+    font-weight: 600;
+  }
+  .alignment-box {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--paper);
+    background: #1c1810;
+    padding: 18px 22px;
+    white-space: pre;
+    overflow-x: auto;
+    position: relative;
+    border-left: 3px solid var(--oxblood);
+  }
+  .alignment-box::before {
+    content: "fig.";
+    position: absolute;
+    top: 8px; right: 12px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 11px;
+    color: rgba(243, 236, 220, 0.4);
+  }
+
+  /* ===== RESULT ===== */
+  .result-panel { margin-top: 32px; }
+  .result-header { display: flex; justify-content: space-between; align-items: baseline; }
+  .copy-status { font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--leaf); }
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    margin: 18px 0 18px;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .metric {
+    padding: 18px 16px;
+    border-right: 1px solid var(--rule-soft);
+    text-align: left;
+  }
+  .metric:last-child { border-right: 0; }
+  .metric b {
+    display: block;
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 42px;
+    line-height: 1;
+    color: var(--oxblood);
+    margin-bottom: 6px;
+    letter-spacing: -0.01em;
+  }
+  .metric span {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .copy-row { margin-top: 14px; }
+
+  .footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .live-region { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* Drop cap for first paragraph of abstract */
+  .dropcap::first-letter {
+    font-family: var(--serif);
+    font-weight: 700;
+    float: left;
+    font-size: 56px;
+    line-height: 0.88;
+    padding: 6px 8px 0 0;
+    color: var(--oxblood);
+  }
+</style>
+</head>
+<body>
+  <article class="page">
+    <header class="masthead">
+      <div>
+        <div class="eyebrow">Vol. I &nbsp;·&nbsp; № 1 &nbsp;·&nbsp; Local Alignment</div>
+        <h1 class="title">Smith–<em>Waterman</em></h1>
+        <p class="subtitle">动态规划如何在两条序列中找出最相似的一段——逐格填充评分矩阵 <em>H</em>,从全矩阵最高分回溯至 0。</p>
+        <p class="attribution">T. F. Smith &amp; M. S. Waterman · <em style="font-family:var(--serif)">Identification of common molecular subsequences</em> · J. Mol. Biol. <strong>147</strong> (1981) 195–197</p>
+      </div>
+      <div class="phase-badge" id="phaseBadge" data-phase="idle">待运行</div>
+    </header>
+
+    <section class="abstract">
+      <h6>Abstract</h6>
+      <p class="dropcap">与 Needleman–Wunsch 的全局比对不同,Smith–Waterman 算法关注 <em>局部</em> 最优——递推公式中多一个 0 作为下界,起点为矩阵全局最大值,终点为得分为 0 的边界。下方演示先一次性求解,再将填充与回溯两阶段以动画分步播放。</p>
+    </section>
+
+    <!-- ===== § I PARAMETERS ===== -->
+    <div class="section-head">
+      <span class="section-num">§ I.</span>
+      <h2 class="section-name">Parameters</h2>
+      <span class="section-aside">Inputs · Scoring · Playback</span>
+    </div>
+
+    <section class="controls">
+      <div class="field-block">
+        <div class="seq-row">
+          <div>
+            <label for="seqA">Sequence A</label>
+            <input id="seqA" type="text" value="ATCG" spellcheck="false" autocomplete="off">
+          </div>
+          <div>
+            <label for="seqB">Sequence B</label>
+            <input id="seqB" type="text" value="TCG" spellcheck="false" autocomplete="off">
+          </div>
+        </div>
+        <div class="example-row">
+          <button type="button" class="link-btn" id="dnaExample">→ DNA 示例</button>
+          <button type="button" class="link-btn" id="proteinExample">→ 蛋白质示例</button>
+          <span class="hint">A–Z,长度 1–24,自动大写去空白</span>
+        </div>
+        <div class="error-box" id="inputErrors" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="field-block">
+        <div class="scores">
+          <div><label for="matchScore">match</label><input id="matchScore" type="number" step="0.5" value="2"></div>
+          <div><label for="mismatchScore">mismatch</label><input id="mismatchScore" type="number" step="0.5" value="-1"></div>
+          <div><label for="gapScore">gap</label><input id="gapScore" type="number" step="0.5" value="-1"></div>
+        </div>
+        <div class="speed-block">
+          <label for="speedRange">动画速度 <span id="speedLabel">中 · 450ms</span></label>
+          <input id="speedRange" type="range" min="0" max="4" step="1" value="2">
+          <label class="checkbox" for="skipFill"><input id="skipFill" type="checkbox"> 跳过填充,只演示回溯</label>
+        </div>
+      </div>
+
+      <div class="field-block">
+        <div class="button-row">
+          <button type="button" class="btn primary" id="runBtn">▷ 运行</button>
+          <button type="button" class="btn" id="pauseBtn" disabled>暂停</button>
+          <button type="button" class="btn" id="stepBtn">单步</button>
+          <button type="button" class="btn danger" id="resetBtn">重置</button>
+        </div>
+        <p class="ctl-hint">单步:在暂停态下推进一格填充或一步回溯。<br>重新点击「运行」会取消旧动画。</p>
+      </div>
+    </section>
+
+    <!-- ===== § II MATRIX ===== -->
+    <div class="section-head">
+      <span class="section-num">§ II.</span>
+      <h2 class="section-name">Scoring Matrix <em style="font-style:italic;color:var(--oxblood);font-weight:400">H</em></h2>
+      <span class="section-aside">Fig. 1 · m × n grid</span>
+    </div>
+
+    <section class="work-area">
+      <div class="matrix-panel">
+        <div class="legend" aria-label="图例">
+          <span class="legend-item"><span class="sw cur"></span>当前格</span>
+          <span class="legend-item"><span class="sw dep"></span>依赖格</span>
+          <span class="legend-item"><span class="sw tr"></span>回溯路径</span>
+          <span class="legend-item"><span class="sw mx"></span>最高分 ★</span>
+        </div>
+        <div class="matrix-scroll" id="matrixScroll">
+          <div class="matrix-wrap" id="matrixWrap">
+            <svg class="trace-overlay" id="traceOverlay" aria-hidden="true"></svg>
+            <div id="matrixHost"></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="sidebar">
+        <div class="side-block">
+          <h3>Current Step <span>§ II.a</span></h3>
+          <div id="formulaPanel">
+            <p class="explain">点击「运行」或「单步」开始。填充阶段会列出 <em>diag / up / left / zero</em> 四个候选;回溯阶段显示 pointer 与追加字符。</p>
+          </div>
+        </div>
+        <div class="side-block">
+          <h3>Recurrence <span>§ II.b</span></h3>
+          <p class="explain">
+            <span style="font-family:var(--mono);font-size:13px;color:var(--ink)">H(i, j) = max</span> 在四项中取大值——对角加上 substitution、上方加 gap、左方加 gap,或归零。
+          </p>
+          <p class="explain">
+            平局优先级固定为 <em>diag → up → left → none</em>。本演示使用线性 gap,不含 affine。
+          </p>
+        </div>
+      </aside>
+    </section>
+
+    <!-- ===== § III TRACEBACK ===== -->
+    <div class="section-head">
+      <span class="section-num">§ III.</span>
+      <h2 class="section-name">Traceback &amp; Local Alignment</h2>
+      <span class="section-aside">Fig. 2 · path from max → 0</span>
+    </div>
+
+    <section class="preview-panel">
+      <div class="preview-header">
+        <p class="explain" style="margin:0">从全矩阵最高分开始,沿 pointer 走回,直到遇到 <em>0</em> 或矩阵边界。途中追加的字符即构成最优局部比对。</p>
+        <span class="preview-status" id="traceStatus">等待回溯</span>
+      </div>
+      <div class="context-box" id="sequenceContext">Sequence A: 等待运行
+Sequence B: 等待运行</div>
+      <div class="alignment-box" id="alignmentPreview">A:
+ 
+B:</div>
+    </section>
+
+    <!-- ===== § IV RESULT ===== -->
+    <div class="section-head">
+      <span class="section-num">§ IV.</span>
+      <h2 class="section-name">Result</h2>
+      <span class="section-aside" id="copyStatus"></span>
+    </div>
+
+    <section class="result-panel">
+      <div id="resultHost">
+        <p class="explain">完成回溯后此处呈现得分、坐标、统计与三行可复制比对。</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>Local Alignment · O(mn)</span>
+      <span>Set in Crimson Pro &amp; IBM Plex Mono</span>
+    </footer>
+  </article>
+
+  <div class="live-region" id="liveRegion" aria-live="polite"></div>
+  <script src="sw-core.js"></script>
+</body>
+</html>
