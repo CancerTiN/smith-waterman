@@ -1,0 +1,1717 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smith-Waterman 局部序列比对动画演示</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --ink: #0f172a;
+      --muted: #475569;
+      --line: #cbd5e1;
+      --soft-line: #e2e8f0;
+      --accent: #1e40af;
+      --accent-soft: #dbeafe;
+      --current: #ffb347;
+      --current-soft: #fff2d8;
+      --dependency: #bfdbfe;
+      --max: #ddd6fe;
+      --trace: #14b8a6;
+      --trace-soft: #ccfbf1;
+      --danger: #dc2626;
+      --danger-soft: #fee2e2;
+      --ok: #047857;
+      --shadow: 0 14px 36px rgba(15, 23, 42, 0.09);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, #f8fafc 0%, #eef6ff 48%, #f8fafc 100%);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .page {
+      width: min(1440px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4vw, 3.8rem);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 860px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .status-pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--accent);
+      box-shadow: var(--shadow);
+      padding: 10px 14px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .control-panel {
+      display: grid;
+      grid-template-columns: minmax(280px, 1.1fr) minmax(260px, 0.8fr) minmax(280px, 1fr);
+      gap: 16px;
+      padding: 16px;
+      margin-bottom: 18px;
+    }
+
+    .field-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 11px;
+      outline: none;
+      transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    }
+
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.14);
+    }
+
+    input.invalid {
+      border-color: var(--danger);
+      background: #fff7f7;
+    }
+
+    .error-box {
+      min-height: 26px;
+      color: var(--danger);
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .example-buttons,
+    .button-row,
+    .speed-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .button-row {
+      margin-top: 10px;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      min-height: 42px;
+      padding: 9px 12px;
+      font-weight: 800;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, color 120ms ease;
+    }
+
+    button:hover:not(:disabled) {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    button.danger {
+      color: var(--danger);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
+    .score-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .speed-control {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    .checkbox input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .matrix-panel {
+      min-width: 0;
+      padding: 14px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+
+    .panel-header h2,
+    .side-panel h2,
+    .result-panel h2 {
+      font-size: 1.05rem;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .swatch.current {
+      background: var(--current);
+    }
+
+    .swatch.dependency {
+      background: var(--dependency);
+    }
+
+    .swatch.trace {
+      background: var(--trace-soft);
+      border-color: var(--trace);
+    }
+
+    .matrix-scroll {
+      position: relative;
+      overflow: auto;
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    .matrix-wrap {
+      position: relative;
+      display: inline-block;
+      min-width: 100%;
+    }
+
+    table.matrix {
+      border-collapse: separate;
+      border-spacing: 4px;
+      table-layout: fixed;
+      font-family: var(--mono);
+    }
+
+    .matrix th,
+    .matrix td {
+      position: relative;
+      width: 50px;
+      min-width: 50px;
+      height: 44px;
+      text-align: center;
+      vertical-align: middle;
+      border: 1px solid var(--soft-line);
+      border-radius: 6px;
+      background: #f8fafc;
+      transition: background 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .matrix th {
+      color: var(--muted);
+      font-weight: 900;
+      background: #eef2ff;
+    }
+
+    .matrix th.corner {
+      background: #fff;
+      border-color: transparent;
+    }
+
+    .matrix td {
+      color: #1e293b;
+      font-weight: 800;
+    }
+
+    .matrix td.pending {
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    .matrix td.initialized {
+      background: #f1f5f9;
+      color: #334155;
+    }
+
+    .matrix td.filled {
+      background: #ffffff;
+      border-color: #cbd5e1;
+    }
+
+    .matrix td.current {
+      background: var(--current);
+      border-color: #b45309;
+      box-shadow: 0 0 0 3px rgba(255, 179, 71, 0.34);
+      transform: scale(1.08);
+      z-index: 2;
+    }
+
+    .matrix td.dependency {
+      background: var(--dependency);
+      border-color: var(--accent);
+    }
+
+    .matrix th.active-label {
+      background: var(--current-soft);
+      color: #7c2d12;
+      border-color: #f59e0b;
+      box-shadow: inset 0 -4px 0 #f59e0b;
+    }
+
+    .matrix td.max-cell {
+      background: var(--max);
+      border-color: #7c3aed;
+      box-shadow: inset 0 0 0 2px #7c3aed;
+    }
+
+    .matrix td.trace-cell {
+      background: var(--trace-soft);
+      border-color: var(--trace);
+      box-shadow: inset 0 0 0 2px var(--trace);
+    }
+
+    .matrix td.trace-current {
+      border-color: var(--danger);
+      box-shadow: inset 0 0 0 3px var(--danger), 0 0 0 3px rgba(220, 38, 38, 0.16);
+    }
+
+    .matrix td.stop-cell {
+      background: var(--danger-soft);
+      border-color: var(--danger);
+    }
+
+    .matrix td.flash {
+      animation: flash 520ms ease-in-out 2;
+    }
+
+    @keyframes flash {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.12); box-shadow: 0 0 0 5px rgba(124, 58, 237, 0.22); }
+    }
+
+    .cell-arrow,
+    .cell-star {
+      position: absolute;
+      font-size: 0.72rem;
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .cell-arrow {
+      right: 4px;
+      bottom: 3px;
+      color: var(--accent);
+    }
+
+    .cell-star {
+      top: 3px;
+      left: 4px;
+      color: #6d28d9;
+    }
+
+    svg.trace-overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .trace-overlay line {
+      stroke: var(--danger);
+      stroke-width: 3;
+      stroke-linecap: round;
+      opacity: 0.75;
+    }
+
+    .side-stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .side-panel,
+    .preview-panel,
+    .result-panel {
+      padding: 14px;
+    }
+
+    .formula-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      color: #1e293b;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+    }
+
+    .formula-line {
+      border: 1px solid var(--soft-line);
+      border-radius: 7px;
+      background: #f8fafc;
+      padding: 8px;
+    }
+
+    .formula-line.chosen {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      font-weight: 900;
+    }
+
+    .explain {
+      color: var(--muted);
+      margin-top: 8px;
+      font-size: 0.92rem;
+    }
+
+    .preview-panel {
+      margin-top: 14px;
+    }
+
+    .alignment-box {
+      margin-top: 10px;
+      overflow-x: auto;
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: var(--mono);
+      padding: 12px;
+      white-space: pre;
+    }
+
+    .context-box {
+      margin-top: 10px;
+      overflow-x: auto;
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #1e293b;
+      font-family: var(--mono);
+      padding: 10px 12px;
+      white-space: pre;
+    }
+
+    .context-box .selected {
+      color: #7c2d12;
+      background: var(--current-soft);
+      border: 1px solid #f59e0b;
+      border-radius: 4px;
+      padding: 1px 3px;
+      font-weight: 900;
+    }
+
+    .result-panel {
+      margin-top: 18px;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+
+    .metric {
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+    }
+
+    .metric b {
+      display: block;
+      font-size: 1.35rem;
+      color: var(--accent);
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .copy-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .live-region {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    @media (max-width: 1100px) {
+      .control-panel,
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        width: min(100% - 20px, 1440px);
+        padding-top: 16px;
+      }
+
+      .field-row,
+      .score-grid,
+      .result-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .matrix th,
+      .matrix td {
+        width: 42px;
+        min-width: 42px;
+        height: 38px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div>
+        <h1>Smith-Waterman 局部序列比对</h1>
+        <p class="subtitle">
+          输入两条序列和线性 gap 评分参数，观察动态规划矩阵如何逐格填充，并从全矩阵最高分单元格沿 traceback pointer 回溯到 0。
+          与 Needleman-Wunsch 不同，Smith-Waterman 的递推包含 0、起点是全矩阵最大值、终点是得分为 0 的局部边界。
+        </p>
+      </div>
+      <div class="status-pill" id="phaseBadge">状态：待运行</div>
+    </header>
+
+    <section class="control-panel panel" aria-label="控制面板">
+      <div class="field-grid">
+        <div class="field-row">
+          <div>
+            <label for="seqA">Sequence A</label>
+            <input id="seqA" type="text" value="ATCG" spellcheck="false" autocomplete="off">
+          </div>
+          <div>
+            <label for="seqB">Sequence B</label>
+            <input id="seqB" type="text" value="TCG" spellcheck="false" autocomplete="off">
+          </div>
+        </div>
+        <div class="example-buttons">
+          <button type="button" id="dnaExample">DNA 示例</button>
+          <button type="button" id="proteinExample">蛋白质示例</button>
+          <span class="hint">每次点击生成随机序列；自动转大写，去除空白，仅允许 A-Z，长度 1-24。</span>
+        </div>
+        <div class="error-box" id="inputErrors" role="status" aria-live="polite"></div>
+      </div>
+
+      <div>
+        <div class="score-grid">
+          <div>
+            <label for="matchScore" title="通常 match > 0, mismatch <= 0, gap <= 0">match</label>
+            <input id="matchScore" type="number" step="0.5" value="2">
+          </div>
+          <div>
+            <label for="mismatchScore" title="通常 match > 0, mismatch <= 0, gap <= 0">mismatch</label>
+            <input id="mismatchScore" type="number" step="0.5" value="-1">
+          </div>
+          <div>
+            <label for="gapScore" title="gap 输入值直接参与加法，不会额外取负">gap</label>
+            <input id="gapScore" type="number" step="0.5" value="-1">
+          </div>
+        </div>
+        <div class="speed-control">
+          <label for="speedRange">速度：<span id="speedLabel">中 · 450ms</span></label>
+          <input id="speedRange" type="range" min="0" max="4" step="1" value="2">
+          <label class="checkbox" for="skipFill">
+            <input id="skipFill" type="checkbox">
+            跳过填充动画，只演示回溯
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <div class="button-row">
+          <button type="button" class="primary" id="runBtn">运行演示</button>
+          <button type="button" id="pauseBtn" disabled>暂停</button>
+          <button type="button" id="stepBtn">单步</button>
+          <button type="button" class="danger" id="resetBtn">重置</button>
+        </div>
+        <p class="hint" style="margin-top: 12px;">
+          单步会在暂停状态下推进一个填充单元格或一个回溯步骤；重复点击运行会取消旧动画并重新开始。
+        </p>
+      </div>
+    </section>
+
+    <section class="main-grid">
+      <div>
+        <section class="matrix-panel panel">
+          <div class="panel-header">
+            <h2>动态规划矩阵 H</h2>
+            <div class="legend" aria-label="图例">
+              <span class="legend-item"><span class="swatch current"></span>当前格</span>
+              <span class="legend-item"><span class="swatch dependency"></span>依赖格</span>
+              <span class="legend-item"><span class="swatch trace"></span>回溯路径</span>
+              <span class="legend-item">★ 并列最高分</span>
+            </div>
+          </div>
+          <div class="matrix-scroll" id="matrixScroll">
+            <div class="matrix-wrap" id="matrixWrap">
+              <svg class="trace-overlay" id="traceOverlay" aria-hidden="true"></svg>
+              <div id="matrixHost"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="preview-panel panel">
+          <div class="panel-header">
+            <h2>回溯与比对预览</h2>
+            <span class="hint" id="traceStatus">等待回溯</span>
+          </div>
+          <div class="context-box" id="sequenceContext">Sequence A: 等待运行
+Sequence B: 等待运行</div>
+          <div class="alignment-box" id="alignmentPreview">A:
+ 
+B:</div>
+        </section>
+      </div>
+
+      <aside class="side-stack">
+        <section class="side-panel panel">
+          <h2>当前计算</h2>
+          <div id="formulaPanel">
+            <p class="explain">点击“运行演示”或“单步”开始。填充时会显示 diag、up、left、zero 四个候选值；回溯时会显示 pointer 指向和追加字符。</p>
+          </div>
+        </section>
+
+        <section class="side-panel panel">
+          <h2>算法要点</h2>
+          <p class="explain">
+            本页面先完整计算 H 矩阵、pointer 矩阵、填充步骤和回溯步骤，再播放动画。pointer 的平局优先级固定为 diag → up → left → none。
+          </p>
+          <p class="explain">
+            gap 是输入的分值，递推中直接相加；本演示使用线性 gap，不使用 affine gap。
+          </p>
+        </section>
+      </aside>
+    </section>
+
+    <section class="result-panel panel">
+      <div class="panel-header">
+        <h2>最终结果</h2>
+        <span class="hint" id="copyStatus"></span>
+      </div>
+      <div id="resultHost">
+        <p class="explain">完成回溯后会显示得分、坐标、统计信息和三行可复制比对结果。</p>
+      </div>
+    </section>
+
+    <div class="live-region" id="liveRegion" aria-live="polite"></div>
+  </main>
+
+  <script>
+    /*
+      Single-file Smith-Waterman teaching demo.
+      Structure:
+      1. Algorithm layer: sanitizeInput, validateInputs, computeSmithWaterman.
+      2. Render layer: matrix table, formula panel, traceback preview, final result.
+      3. Animation controller: state machine with runId cancellation and pause-aware sleep.
+    */
+
+    const POINTER = {
+      DIAG: "diag",
+      UP: "up",
+      LEFT: "left",
+      NONE: "none"
+    };
+
+    const ARROW = {
+      diag: "↖",
+      up: "↑",
+      left: "←",
+      none: "STOP"
+    };
+
+    const SPEEDS = [
+      { label: "极慢", delay: 1500 },
+      { label: "慢", delay: 900 },
+      { label: "中", delay: 450 },
+      { label: "快", delay: 150 },
+      { label: "极快", delay: 50 }
+    ];
+
+    const DEFAULTS = {
+      seqA: "ATCG",
+      seqB: "TCG",
+      match: 2,
+      mismatch: -1,
+      gap: -1
+    };
+
+    const EXAMPLE_SETS = {
+      dna: {
+        alphabet: "ACGT",
+        minLength: 8,
+        maxLength: 14,
+        match: 3,
+        mismatch: -3,
+        gap: -2,
+        motifLength: 4
+      },
+      protein: {
+        alphabet: "ACDEFGHIKLMNPQRSTVWYX",
+        minLength: 9,
+        maxLength: 16,
+        match: 2,
+        mismatch: -1,
+        gap: -2,
+        motifLength: 3
+      }
+    };
+
+    const state = {
+      runId: 0,
+      phase: "idle",
+      isPaused: false,
+      timer: null,
+      fillIndex: 0,
+      tracebackIndex: 0,
+      computed: null,
+      previewA: "",
+      previewMid: "",
+      previewB: "",
+      lastTraceCell: null
+    };
+
+    const els = {
+      seqA: document.getElementById("seqA"),
+      seqB: document.getElementById("seqB"),
+      matchScore: document.getElementById("matchScore"),
+      mismatchScore: document.getElementById("mismatchScore"),
+      gapScore: document.getElementById("gapScore"),
+      inputErrors: document.getElementById("inputErrors"),
+      runBtn: document.getElementById("runBtn"),
+      pauseBtn: document.getElementById("pauseBtn"),
+      stepBtn: document.getElementById("stepBtn"),
+      resetBtn: document.getElementById("resetBtn"),
+      dnaExample: document.getElementById("dnaExample"),
+      proteinExample: document.getElementById("proteinExample"),
+      speedRange: document.getElementById("speedRange"),
+      speedLabel: document.getElementById("speedLabel"),
+      skipFill: document.getElementById("skipFill"),
+      phaseBadge: document.getElementById("phaseBadge"),
+      matrixHost: document.getElementById("matrixHost"),
+      matrixWrap: document.getElementById("matrixWrap"),
+      traceOverlay: document.getElementById("traceOverlay"),
+      formulaPanel: document.getElementById("formulaPanel"),
+      alignmentPreview: document.getElementById("alignmentPreview"),
+      traceStatus: document.getElementById("traceStatus"),
+      sequenceContext: document.getElementById("sequenceContext"),
+      resultHost: document.getElementById("resultHost"),
+      copyStatus: document.getElementById("copyStatus"),
+      liveRegion: document.getElementById("liveRegion")
+    };
+
+    function sanitizeInput(value) {
+      return value.toUpperCase().replace(/\s+/g, "");
+    }
+
+    function validateInputs() {
+      const seqA = sanitizeInput(els.seqA.value);
+      const seqB = sanitizeInput(els.seqB.value);
+      const match = Number(els.matchScore.value);
+      const mismatch = Number(els.mismatchScore.value);
+      const gap = Number(els.gapScore.value);
+      const errors = [];
+      const invalidA = [...new Set(seqA.replace(/[A-Z]/g, "").split("").filter(Boolean))];
+      const invalidB = [...new Set(seqB.replace(/[A-Z]/g, "").split("").filter(Boolean))];
+
+      els.seqA.classList.toggle("invalid", invalidA.length > 0 || seqA.length === 0 || seqA.length > 24);
+      els.seqB.classList.toggle("invalid", invalidB.length > 0 || seqB.length === 0 || seqB.length > 24);
+      [els.matchScore, els.mismatchScore, els.gapScore].forEach((input) => input.classList.remove("invalid"));
+
+      if (!seqA) errors.push("Sequence A 不能为空。");
+      if (!seqB) errors.push("Sequence B 不能为空。");
+      if (invalidA.length) errors.push(`Sequence A 含非法字符：${invalidA.join(", ")}。`);
+      if (invalidB.length) errors.push(`Sequence B 含非法字符：${invalidB.join(", ")}。`);
+      if (seqA.length > 24) errors.push("Sequence A 超过 24 个字符。");
+      if (seqB.length > 24) errors.push("Sequence B 超过 24 个字符。");
+      if (!Number.isFinite(match)) {
+        errors.push("match 必须是有效数字。");
+        els.matchScore.classList.add("invalid");
+      }
+      if (!Number.isFinite(mismatch)) {
+        errors.push("mismatch 必须是有效数字。");
+        els.mismatchScore.classList.add("invalid");
+      }
+      if (!Number.isFinite(gap)) {
+        errors.push("gap 必须是有效数字。");
+        els.gapScore.classList.add("invalid");
+      }
+
+      els.inputErrors.textContent = errors.join(" ");
+      els.runBtn.disabled = errors.length > 0;
+      return { ok: errors.length === 0, seqA, seqB, match, mismatch, gap, errors };
+    }
+
+    function computeSmithWaterman(seqA, seqB, params) {
+      const rows = seqA.length + 1;
+      const cols = seqB.length + 1;
+      const H = Array.from({ length: rows }, () => Array(cols).fill(0));
+      const pointer = Array.from({ length: rows }, () => Array(cols).fill(POINTER.NONE));
+      const fillSteps = [];
+      let maxScore = 0;
+      const maxCells = [{ i: 0, j: 0 }];
+
+      for (let i = 1; i < rows; i += 1) {
+        for (let j = 1; j < cols; j += 1) {
+          const charA = seqA[i - 1];
+          const charB = seqB[j - 1];
+          const substitution = charA === charB ? params.match : params.mismatch;
+          const diag = H[i - 1][j - 1] + substitution;
+          const up = H[i - 1][j] + params.gap;
+          const left = H[i][j - 1] + params.gap;
+          const zero = 0;
+          const value = Math.max(zero, diag, up, left);
+
+          let ptr = POINTER.NONE;
+          if (value > 0 && value === diag) ptr = POINTER.DIAG;
+          else if (value > 0 && value === up) ptr = POINTER.UP;
+          else if (value > 0 && value === left) ptr = POINTER.LEFT;
+
+          H[i][j] = value;
+          pointer[i][j] = ptr;
+
+          if (value > maxScore) {
+            maxScore = value;
+            maxCells.length = 0;
+            maxCells.push({ i, j });
+          } else if (value === maxScore) {
+            maxCells.push({ i, j });
+          }
+
+          fillSteps.push({
+            i,
+            j,
+            charA,
+            charB,
+            substitution,
+            diag,
+            up,
+            left,
+            zero,
+            value,
+            pointer: ptr
+          });
+        }
+      }
+
+      const positiveMaxCells = maxCells.filter((cell) => H[cell.i][cell.j] === maxScore && maxScore > 0);
+      const maxCell = positiveMaxCells[0] || { i: 0, j: 0 };
+      const tracebackSteps = [];
+      const alignedA = [];
+      const alignedB = [];
+      const matchLine = [];
+
+      let i = maxCell.i;
+      let j = maxCell.j;
+      while (maxScore > 0 && i > 0 && j > 0 && H[i][j] > 0 && pointer[i][j] !== POINTER.NONE) {
+        const ptr = pointer[i][j];
+        let addA = "";
+        let addB = "";
+        let addMatch = " ";
+        let nextI = i;
+        let nextJ = j;
+
+        if (ptr === POINTER.DIAG) {
+          addA = seqA[i - 1];
+          addB = seqB[j - 1];
+          addMatch = addA === addB ? "|" : ".";
+          nextI = i - 1;
+          nextJ = j - 1;
+        } else if (ptr === POINTER.UP) {
+          addA = seqA[i - 1];
+          addB = "-";
+          nextI = i - 1;
+        } else if (ptr === POINTER.LEFT) {
+          addA = "-";
+          addB = seqB[j - 1];
+          nextJ = j - 1;
+        }
+
+        tracebackSteps.push({
+          i,
+          j,
+          value: H[i][j],
+          pointer: ptr,
+          addSeq1: addA,
+          addSeq2: addB,
+          addMatch,
+          nextI,
+          nextJ
+        });
+
+        alignedA.push(addA);
+        alignedB.push(addB);
+        matchLine.push(addMatch);
+        i = nextI;
+        j = nextJ;
+      }
+
+      const result = {
+        score: maxScore,
+        start: maxCell,
+        end: { i, j },
+        alignedA: alignedA.reverse().join(""),
+        alignedB: alignedB.reverse().join(""),
+        matchLine: matchLine.reverse().join("")
+      };
+
+      const length = result.alignedA.length;
+      const matches = [...result.matchLine].filter((char) => char === "|").length;
+      const mismatches = [...result.matchLine].filter((char) => char === ".").length;
+      const gaps = [...result.alignedA + result.alignedB].filter((char) => char === "-").length;
+      result.stats = {
+        length,
+        matches,
+        mismatches,
+        gaps,
+        identity: length ? matches / length : 0,
+        gapRate: length ? gaps / length : 0
+      };
+
+      return { seqA, seqB, params, H, pointer, fillSteps, tracebackSteps, maxScore, maxCells: positiveMaxCells, maxCell, result };
+    }
+
+    function buildMatrixTable(computed, revealAll = false) {
+      const { seqA, seqB, H, pointer } = computed;
+      const table = document.createElement("table");
+      table.className = "matrix";
+      table.setAttribute("aria-label", "Smith-Waterman dynamic programming scoring matrix");
+
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      headerRow.appendChild(createHeaderCell(""));
+      headerRow.appendChild(createHeaderCell("−", "col-label-0"));
+      for (let j = 0; j < seqB.length; j += 1) {
+        headerRow.appendChild(createHeaderCell(seqB[j], `col-label-${j + 1}`));
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      for (let i = 0; i <= seqA.length; i += 1) {
+        const row = document.createElement("tr");
+        row.appendChild(createHeaderCell(i === 0 ? "−" : seqA[i - 1], `row-label-${i}`));
+        for (let j = 0; j <= seqB.length; j += 1) {
+          const cell = document.createElement("td");
+          cell.id = cellId(i, j);
+          cell.dataset.i = String(i);
+          cell.dataset.j = String(j);
+          const initialized = i === 0 || j === 0;
+          cell.textContent = initialized || revealAll ? formatScore(H[i][j]) : "·";
+          cell.className = initialized ? "initialized" : revealAll ? "filled" : "pending";
+          cell.title = initialized || revealAll ? tooltipFor(i, j, H[i][j], pointer[i][j]) : `H(${i},${j}) 尚未填充`;
+          if (revealAll && pointer[i][j] !== POINTER.NONE) appendArrow(cell, pointer[i][j]);
+          row.appendChild(cell);
+        }
+        tbody.appendChild(row);
+      }
+
+      table.appendChild(tbody);
+      els.matrixHost.replaceChildren(table);
+      resetTraceOverlay();
+    }
+
+    function createHeaderCell(text, id = "") {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = text;
+      if (!text) th.classList.add("corner");
+      if (id) th.id = id;
+      return th;
+    }
+
+    function renderInitialMatrix() {
+      const validation = validateInputs();
+      const seqA = validation.seqA || DEFAULTS.seqA;
+      const seqB = validation.seqB || DEFAULTS.seqB;
+      const computed = computeSmithWaterman(seqA, seqB, {
+        match: Number.isFinite(validation.match) ? validation.match : DEFAULTS.match,
+        mismatch: Number.isFinite(validation.mismatch) ? validation.mismatch : DEFAULTS.mismatch,
+        gap: Number.isFinite(validation.gap) ? validation.gap : DEFAULTS.gap
+      });
+      buildMatrixTable(computed, false);
+      clearHighlights();
+      resetTraceOverlay();
+    }
+
+    function getInputsOrShowError() {
+      const validation = validateInputs();
+      if (!validation.ok) return null;
+      els.seqA.value = validation.seqA;
+      els.seqB.value = validation.seqB;
+      return validation;
+    }
+
+    function updateFormulaPanel(step, mode = "fill") {
+      if (!step) {
+        els.formulaPanel.innerHTML = `<p class="explain">等待下一步。</p>`;
+        return;
+      }
+
+      if (mode === "traceback") {
+        els.formulaPanel.innerHTML = `
+          <p><strong>当前阶段：</strong>回溯中</p>
+          <div class="formula-list">
+            <div class="formula-line chosen">当前坐标：H(${step.i}, ${step.j}) = ${formatScore(step.value)}</div>
+            <div class="formula-line">pointer：${ARROW[step.pointer]} (${step.pointer})</div>
+            <div class="formula-line">追加：A=${step.addSeq1}, B=${step.addSeq2}, 标识=${step.addMatch === " " ? "空格" : step.addMatch}</div>
+            <div class="formula-line">下一步：H(${step.nextI}, ${step.nextJ})</div>
+          </div>
+        `;
+        return;
+      }
+
+      const chosen = step.pointer;
+      els.formulaPanel.innerHTML = `
+        <p><strong>当前阶段：</strong>矩阵填充中</p>
+        <p class="explain">当前计算：H(${step.i}, ${step.j})；比较 A[${step.i - 1}] = ${step.charA}，B[${step.j - 1}] = ${step.charB}</p>
+        <div class="formula-list">
+          <div class="formula-line ${chosen === POINTER.DIAG ? "chosen" : ""}">diag = H(${step.i - 1},${step.j - 1}) + ${step.charA === step.charB ? "match" : "mismatch"} = ${formatScore(step.diag)} ${chosen === POINTER.DIAG ? "✓ ↖" : ""}</div>
+          <div class="formula-line ${chosen === POINTER.UP ? "chosen" : ""}">up = H(${step.i - 1},${step.j}) + gap = ${formatScore(step.up)} ${chosen === POINTER.UP ? "✓ ↑" : ""}</div>
+          <div class="formula-line ${chosen === POINTER.LEFT ? "chosen" : ""}">left = H(${step.i},${step.j - 1}) + gap = ${formatScore(step.left)} ${chosen === POINTER.LEFT ? "✓ ←" : ""}</div>
+          <div class="formula-line ${chosen === POINTER.NONE ? "chosen" : ""}">zero = 0 ${chosen === POINTER.NONE ? "✓ STOP" : ""}</div>
+          <div class="formula-line chosen">H(${step.i}, ${step.j}) = ${formatScore(step.value)}；方向：${ARROW[step.pointer]}</div>
+        </div>
+      `;
+    }
+
+    function updateTracebackPanel(message) {
+      els.traceStatus.textContent = message;
+    }
+
+    function renderSequenceContext(computed) {
+      if (!computed) {
+        els.sequenceContext.innerHTML = "Sequence A: 等待运行\nSequence B: 等待运行";
+        return "";
+      }
+
+      if (computed.maxScore <= 0) {
+        const html = [
+          `Sequence A: ${escapeHtml(computed.seqA)}`,
+          `Sequence B: ${escapeHtml(computed.seqB)}`,
+          "未找到正分局部片段"
+        ].join("\n");
+        els.sequenceContext.innerHTML = html;
+        return html;
+      }
+
+      const { result } = computed;
+      const html = [
+        `Sequence A: ${highlightSequenceSpan(computed.seqA, result.end.i, result.start.i)}`,
+        `Sequence B: ${highlightSequenceSpan(computed.seqB, result.end.j, result.start.j)}`,
+        `局部窗口：A[${result.end.i}:${result.start.i}]，B[${result.end.j}:${result.start.j}]`
+      ].join("\n");
+      els.sequenceContext.innerHTML = html;
+      return html;
+    }
+
+    function highlightSequenceSpan(sequence, start, end) {
+      return [
+        escapeHtml(sequence.slice(0, start)),
+        `<span class="selected">${escapeHtml(sequence.slice(start, end))}</span>`,
+        escapeHtml(sequence.slice(end))
+      ].join("");
+    }
+
+    function plainSequenceContext(computed) {
+      if (!computed || computed.maxScore <= 0) {
+        return [
+          `Sequence A: ${computed ? computed.seqA : ""}`,
+          `Sequence B: ${computed ? computed.seqB : ""}`
+        ].join("\n");
+      }
+
+      const { result } = computed;
+      return [
+        `Sequence A: ${bracketSequenceSpan(computed.seqA, result.end.i, result.start.i)}`,
+        `Sequence B: ${bracketSequenceSpan(computed.seqB, result.end.j, result.start.j)}`,
+        `Window: A[${result.end.i}:${result.start.i}], B[${result.end.j}:${result.start.j}]`
+      ].join("\n");
+    }
+
+    function bracketSequenceSpan(sequence, start, end) {
+      return `${sequence.slice(0, start)}[${sequence.slice(start, end)}]${sequence.slice(end)}`;
+    }
+
+    function updateAlignmentPreview(step) {
+      if (!step) {
+        els.alignmentPreview.textContent = "A:\n \nB:";
+        return;
+      }
+      state.previewA = step.addSeq1 + state.previewA;
+      state.previewMid = (step.addMatch === "." ? " " : step.addMatch) + state.previewMid;
+      state.previewB = step.addSeq2 + state.previewB;
+      els.alignmentPreview.textContent = `A: ${state.previewA}\n   ${state.previewMid}\nB: ${state.previewB}`;
+    }
+
+    function renderFinalResult(computed) {
+      if (!computed || computed.maxScore <= 0) {
+        els.resultHost.innerHTML = `
+          <p class="explain"><strong>没有找到正分局部比对，请调整序列或评分参数。</strong></p>
+          <div class="context-box">${renderSequenceContextHtml(computed)}</div>
+        `;
+        return;
+      }
+
+      const { result } = computed;
+      const identity = Math.round(result.stats.identity * 1000) / 10;
+      const gapRate = Math.round(result.stats.gapRate * 1000) / 10;
+      const text = resultText(computed);
+
+      els.resultHost.innerHTML = `
+        <div class="result-grid">
+          <div class="metric"><b>${formatScore(result.score)}</b><span>比对得分</span></div>
+          <div class="metric"><b>${result.stats.length}</b><span>比对长度</span></div>
+          <div class="metric"><b>${result.stats.matches}</b><span>匹配数</span></div>
+          <div class="metric"><b>${result.stats.gaps}</b><span>空位数</span></div>
+        </div>
+        <p class="explain">起点：H(${result.start.i}, ${result.start.j})；终点：H(${result.end.i}, ${result.end.j})；Identity：${result.stats.matches}/${result.stats.length} (${identity}%)；Gaps：${result.stats.gaps}/${result.stats.length} (${gapRate}%)。</p>
+        <div class="context-box">${renderSequenceContextHtml(computed)}</div>
+        <div class="alignment-box">${escapeHtml(text)}</div>
+        <div class="copy-row">
+          <button type="button" id="copyResult">复制结果</button>
+        </div>
+      `;
+      document.getElementById("copyResult").addEventListener("click", async () => {
+        await navigator.clipboard.writeText(text);
+        els.copyStatus.textContent = "已复制";
+        window.setTimeout(() => { els.copyStatus.textContent = ""; }, 1400);
+      });
+    }
+
+    function resultText(computed) {
+      const { result } = computed;
+      const identity = Math.round(result.stats.identity * 1000) / 10;
+      const gapRate = Math.round(result.stats.gapRate * 1000) / 10;
+      return [
+        `Score: ${formatScore(result.score)}`,
+        `Start: H(${result.start.i}, ${result.start.j}), End: H(${result.end.i}, ${result.end.j})`,
+        plainSequenceContext(computed),
+        `Length: ${result.stats.length}, Identity: ${result.stats.matches}/${result.stats.length} (${identity}%), Gaps: ${result.stats.gaps}/${result.stats.length} (${gapRate}%)`,
+        `A: ${result.alignedA}`,
+        `   ${result.matchLine}`,
+        `B: ${result.alignedB}`
+      ].join("\n");
+    }
+
+    function renderSequenceContextHtml(computed) {
+      if (!computed || computed.maxScore <= 0) {
+        return escapeHtml(plainSequenceContext(computed));
+      }
+
+      const { result } = computed;
+      return [
+        `Sequence A: ${highlightSequenceSpan(computed.seqA, result.end.i, result.start.i)}`,
+        `Sequence B: ${highlightSequenceSpan(computed.seqB, result.end.j, result.start.j)}`,
+        `局部窗口：A[${result.end.i}:${result.start.i}]，B[${result.end.j}:${result.start.j}]`
+      ].join("\n");
+    }
+
+    function clearHighlights() {
+      document.querySelectorAll(".current, .dependency, .active-label, .trace-current, .stop-cell").forEach((node) => {
+        node.classList.remove("current", "dependency", "active-label", "trace-current", "stop-cell");
+      });
+    }
+
+    function clearTransientFillHighlights() {
+      document.querySelectorAll(".current, .dependency, .active-label").forEach((node) => {
+        node.classList.remove("current", "dependency", "active-label");
+      });
+    }
+
+    function resetState(restoreDefaults = false) {
+      cancelCurrentRun();
+      if (restoreDefaults) {
+        els.seqA.value = DEFAULTS.seqA;
+        els.seqB.value = DEFAULTS.seqB;
+        els.matchScore.value = DEFAULTS.match;
+        els.mismatchScore.value = DEFAULTS.mismatch;
+        els.gapScore.value = DEFAULTS.gap;
+        els.skipFill.checked = false;
+      }
+      state.phase = "idle";
+      state.isPaused = false;
+      state.fillIndex = 0;
+      state.tracebackIndex = 0;
+      state.computed = null;
+      state.previewA = "";
+      state.previewMid = "";
+      state.previewB = "";
+      state.lastTraceCell = null;
+      els.pauseBtn.textContent = "暂停";
+      els.pauseBtn.disabled = true;
+      els.resultHost.innerHTML = `<p class="explain">完成回溯后会显示得分、坐标、统计信息和三行可复制比对结果。</p>`;
+      els.formulaPanel.innerHTML = `<p class="explain">点击“运行演示”或“单步”开始。填充时会显示 diag、up、left、zero 四个候选值；回溯时会显示 pointer 指向和追加字符。</p>`;
+      renderSequenceContext(null);
+      els.alignmentPreview.textContent = "A:\n \nB:";
+      updateTracebackPanel("等待回溯");
+      setPhase("idle");
+      renderInitialMatrix();
+      updateButtons();
+    }
+
+    function cancelCurrentRun() {
+      state.runId += 1;
+      if (state.timer) {
+        clearTimeout(state.timer);
+        state.timer = null;
+      }
+      state.isPaused = false;
+    }
+
+    function sleep(runId) {
+      return new Promise((resolve, reject) => {
+        const tick = () => {
+          if (runId !== state.runId) {
+            reject(new Error("cancelled"));
+            return;
+          }
+          if (state.isPaused) {
+            state.timer = window.setTimeout(tick, 80);
+            return;
+          }
+          state.timer = window.setTimeout(resolve, getCurrentDelay());
+        };
+        tick();
+      });
+    }
+
+    async function animateFill(runId) {
+      state.phase = "fill";
+      setPhase("fill");
+      updateButtons();
+
+      if (els.skipFill.checked) {
+        buildMatrixTable(state.computed, true);
+        state.fillIndex = state.computed.fillSteps.length;
+        markMaxCells(state.computed);
+        await sleep(runId);
+        return;
+      }
+
+      while (state.fillIndex < state.computed.fillSteps.length) {
+        stepFill();
+        await sleep(runId);
+      }
+      markMaxCells(state.computed);
+      updateFormulaPanel(null);
+      els.formulaPanel.innerHTML = `<p><strong>矩阵填充完成。</strong></p><p class="explain">全矩阵最高分为 ${formatScore(state.computed.maxScore)}，回溯将从行优先遇到的第一个最高分单元格开始。</p>`;
+      await sleep(runId);
+    }
+
+    async function animateTraceback(runId) {
+      state.phase = "traceback";
+      setPhase("traceback");
+      updateButtons();
+      if (state.computed.maxScore <= 0) {
+        updateTracebackPanel("没有找到正分局部比对");
+        renderFinalResult(state.computed);
+        state.phase = "done";
+        setPhase("done");
+        updateButtons();
+        return;
+      }
+
+      while (state.tracebackIndex < state.computed.tracebackSteps.length) {
+        stepTraceback();
+        await sleep(runId);
+      }
+      const stopCell = getCell(state.computed.result.end.i, state.computed.result.end.j);
+      if (stopCell) stopCell.classList.add("stop-cell");
+      updateTracebackPanel("回溯完成，最优局部比对已生成");
+      els.formulaPanel.innerHTML = `<p><strong>回溯完成。</strong></p><p class="explain">最优局部比对已生成。终止位置为 H(${state.computed.result.end.i}, ${state.computed.result.end.j})。</p>`;
+      renderFinalResult(state.computed);
+      state.phase = "done";
+      setPhase("done");
+      updateButtons();
+    }
+
+    async function runDemo() {
+      const validation = getInputsOrShowError();
+      if (!validation) return;
+      cancelCurrentRun();
+      const runId = state.runId;
+      initializeRun(validation);
+      try {
+        await animateFill(runId);
+        await animateTraceback(runId);
+      } catch (error) {
+        if (error.message !== "cancelled") throw error;
+      }
+    }
+
+    function initializeRun(validation) {
+      state.phase = "idle";
+      state.isPaused = false;
+      state.fillIndex = 0;
+      state.tracebackIndex = 0;
+      state.previewA = "";
+      state.previewMid = "";
+      state.previewB = "";
+      state.lastTraceCell = null;
+      state.computed = computeSmithWaterman(validation.seqA, validation.seqB, {
+        match: validation.match,
+        mismatch: validation.mismatch,
+        gap: validation.gap
+      });
+      buildMatrixTable(state.computed, false);
+      els.resultHost.innerHTML = `<p class="explain">动画进行中，结果将在回溯完成后生成。</p>`;
+      renderSequenceContext(state.computed);
+      els.alignmentPreview.textContent = "A:\n \nB:";
+      updateTracebackPanel("等待回溯");
+      updateButtons();
+    }
+
+    function stepFill() {
+      const step = state.computed.fillSteps[state.fillIndex];
+      if (!step) {
+        markMaxCells(state.computed);
+        state.phase = "traceback";
+        setPhase("traceback");
+        updateButtons();
+        return;
+      }
+      clearTransientFillHighlights();
+      highlightFillStep(step);
+      const cell = getCell(step.i, step.j);
+      cell.textContent = formatScore(step.value);
+      cell.classList.remove("pending");
+      cell.classList.add("filled");
+      cell.title = tooltipFor(step.i, step.j, step.value, step.pointer);
+      if (step.pointer !== POINTER.NONE) appendArrow(cell, step.pointer);
+      updateFormulaPanel(step, "fill");
+      state.fillIndex += 1;
+      announce(`已填充 H(${step.i}, ${step.j})，得分 ${formatScore(step.value)}`);
+    }
+
+    function stepTraceback() {
+      const step = state.computed.tracebackSteps[state.tracebackIndex];
+      if (!step) {
+        renderFinalResult(state.computed);
+        state.phase = "done";
+        setPhase("done");
+        updateButtons();
+        return;
+      }
+
+      const current = getCell(step.i, step.j);
+      const next = getCell(step.nextI, step.nextJ);
+      if (state.lastTraceCell) state.lastTraceCell.classList.remove("trace-current");
+      current.classList.add("trace-cell", "trace-current");
+      if (next) drawTraceLine(current, next);
+      updateFormulaPanel(step, "traceback");
+      updateAlignmentPreview(step);
+      updateTracebackPanel(`回溯 H(${step.i}, ${step.j})，方向 ${ARROW[step.pointer]}`);
+      state.lastTraceCell = next || current;
+      state.tracebackIndex += 1;
+      announce(`回溯 H(${step.i}, ${step.j})`);
+    }
+
+    function stepOnce() {
+      if (!state.computed || state.phase === "idle") {
+        const validation = getInputsOrShowError();
+        if (!validation) return;
+        cancelCurrentRun();
+        initializeRun(validation);
+        state.phase = "fill";
+        setPhase("fill");
+      }
+
+      state.isPaused = true;
+      els.pauseBtn.textContent = "继续";
+
+      if (state.phase === "fill") {
+        if (els.skipFill.checked) {
+          buildMatrixTable(state.computed, true);
+          state.fillIndex = state.computed.fillSteps.length;
+        } else if (state.fillIndex < state.computed.fillSteps.length) {
+          stepFill();
+          updateButtons();
+          return;
+        }
+        markMaxCells(state.computed);
+        state.phase = "traceback";
+        setPhase("traceback");
+        updateButtons();
+        return;
+      }
+
+      if (state.phase === "traceback") {
+        if (state.computed.maxScore <= 0 || state.tracebackIndex >= state.computed.tracebackSteps.length) {
+          renderFinalResult(state.computed);
+          state.phase = "done";
+          setPhase("done");
+        } else {
+          stepTraceback();
+        }
+        updateButtons();
+      }
+    }
+
+    function highlightFillStep(step) {
+      getCell(step.i, step.j).classList.add("current");
+      getCell(step.i - 1, step.j - 1).classList.add("dependency");
+      getCell(step.i - 1, step.j).classList.add("dependency");
+      getCell(step.i, step.j - 1).classList.add("dependency");
+      document.getElementById(`row-label-${step.i}`).classList.add("active-label");
+      document.getElementById(`col-label-${step.j}`).classList.add("active-label");
+    }
+
+    function markMaxCells(computed) {
+      computed.maxCells.forEach(({ i, j }) => {
+        const cell = getCell(i, j);
+        if (!cell) return;
+        cell.classList.add("max-cell", "flash");
+        if (!cell.querySelector(".cell-star")) {
+          const star = document.createElement("span");
+          star.className = "cell-star";
+          star.textContent = "★";
+          cell.appendChild(star);
+        }
+      });
+      if (computed.maxScore <= 0) {
+        updateTracebackPanel("没有找到正分局部比对");
+      } else {
+        updateTracebackPanel(`最高分 ${formatScore(computed.maxScore)}，共有 ${computed.maxCells.length} 个最高分单元格`);
+      }
+    }
+
+    function appendArrow(cell, pointer) {
+      cell.querySelector(".cell-arrow")?.remove();
+      const arrow = document.createElement("span");
+      arrow.className = "cell-arrow";
+      arrow.textContent = ARROW[pointer];
+      cell.appendChild(arrow);
+    }
+
+    function drawTraceLine(fromCell, toCell) {
+      const wrapBox = els.matrixWrap.getBoundingClientRect();
+      const a = fromCell.getBoundingClientRect();
+      const b = toCell.getBoundingClientRect();
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(a.left + a.width / 2 - wrapBox.left));
+      line.setAttribute("y1", String(a.top + a.height / 2 - wrapBox.top));
+      line.setAttribute("x2", String(b.left + b.width / 2 - wrapBox.left));
+      line.setAttribute("y2", String(b.top + b.height / 2 - wrapBox.top));
+      els.traceOverlay.appendChild(line);
+    }
+
+    function resetTraceOverlay() {
+      els.traceOverlay.replaceChildren();
+      requestAnimationFrame(() => {
+        const box = els.matrixHost.getBoundingClientRect();
+        els.traceOverlay.setAttribute("viewBox", `0 0 ${Math.max(1, box.width)} ${Math.max(1, box.height)}`);
+        els.traceOverlay.style.width = `${Math.max(1, box.width)}px`;
+        els.traceOverlay.style.height = `${Math.max(1, box.height)}px`;
+      });
+    }
+
+    function getCell(i, j) {
+      return document.getElementById(cellId(i, j));
+    }
+
+    function cellId(i, j) {
+      return `cell-${i}-${j}`;
+    }
+
+    function tooltipFor(i, j, value, pointer) {
+      return `H(${i},${j})=${formatScore(value)}, ptr=${ARROW[pointer]}`;
+    }
+
+    function formatScore(value) {
+      return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
+    }
+
+    function getCurrentDelay() {
+      return SPEEDS[Number(els.speedRange.value)].delay;
+    }
+
+    function updateSpeedLabel() {
+      const speed = SPEEDS[Number(els.speedRange.value)];
+      els.speedLabel.textContent = `${speed.label} · ${speed.delay}ms`;
+    }
+
+    function setPhase(phase) {
+      const labels = {
+        idle: "待运行",
+        fill: "矩阵填充中",
+        traceback: "回溯中",
+        done: "完成"
+      };
+      els.phaseBadge.textContent = `状态：${labels[phase] || phase}`;
+      announce(`状态：${labels[phase] || phase}`);
+    }
+
+    function updateButtons() {
+      const isAnimating = state.phase === "fill" || state.phase === "traceback";
+      els.pauseBtn.disabled = !isAnimating || state.phase === "done";
+      els.pauseBtn.textContent = state.isPaused ? "继续" : "暂停";
+      els.stepBtn.disabled = state.phase === "done";
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function announce(message) {
+      els.liveRegion.textContent = message;
+    }
+
+    function setExample(kind) {
+      const example = generateRandomExample(kind);
+      els.seqA.value = example.seqA;
+      els.seqB.value = example.seqB;
+      els.matchScore.value = example.match;
+      els.mismatchScore.value = example.mismatch;
+      els.gapScore.value = example.gap;
+      cancelCurrentRun();
+      state.computed = null;
+      state.phase = "idle";
+      setPhase("idle");
+      validateInputs();
+      renderInitialMatrix();
+      updateButtons();
+    }
+
+    function generateRandomExample(kind) {
+      const config = EXAMPLE_SETS[kind];
+      const lengthA = randomInt(config.minLength, config.maxLength);
+      const lengthB = randomInt(config.minLength - 1, config.maxLength - 1);
+      const motifLength = Math.min(config.motifLength + randomInt(0, 2), lengthA - 2, lengthB - 2);
+      const motif = randomSequence(config.alphabet, motifLength);
+      const seqA = embedMotif(randomSequence(config.alphabet, lengthA), motif);
+      let seqB = embedMotif(randomSequence(config.alphabet, lengthB), maybeMutateMotif(motif, config.alphabet));
+
+      if (seqA === seqB) {
+        seqB = mutateAt(seqB, randomInt(0, seqB.length - 1), config.alphabet);
+      }
+
+      return {
+        seqA,
+        seqB,
+        match: config.match,
+        mismatch: config.mismatch,
+        gap: config.gap
+      };
+    }
+
+    function randomSequence(alphabet, length) {
+      return Array.from({ length }, () => alphabet[randomInt(0, alphabet.length - 1)]).join("");
+    }
+
+    function embedMotif(sequence, motif) {
+      const start = randomInt(0, sequence.length - motif.length);
+      return `${sequence.slice(0, start)}${motif}${sequence.slice(start + motif.length)}`;
+    }
+
+    function maybeMutateMotif(motif, alphabet) {
+      const chars = motif.split("");
+      if (chars.length > 2 && Math.random() < 0.55) {
+        chars[randomInt(0, chars.length - 1)] = "-";
+      }
+      const mutated = chars.join("").replace(/-/g, "");
+      return mutated || motif;
+    }
+
+    function mutateAt(sequence, index, alphabet) {
+      const current = sequence[index];
+      const choices = alphabet.split("").filter((char) => char !== current);
+      const replacement = choices[randomInt(0, choices.length - 1)];
+      return `${sequence.slice(0, index)}${replacement}${sequence.slice(index + 1)}`;
+    }
+
+    function randomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    els.runBtn.addEventListener("click", runDemo);
+    els.pauseBtn.addEventListener("click", () => {
+      state.isPaused = !state.isPaused;
+      updateButtons();
+      updateTracebackPanel(state.isPaused ? "已暂停" : "继续播放");
+    });
+    els.stepBtn.addEventListener("click", () => {
+      if (state.phase === "fill" || state.phase === "traceback") state.isPaused = true;
+      stepOnce();
+      updateButtons();
+    });
+    els.resetBtn.addEventListener("click", () => resetState(true));
+    els.dnaExample.addEventListener("click", () => setExample("dna"));
+    els.proteinExample.addEventListener("click", () => setExample("protein"));
+    els.speedRange.addEventListener("input", updateSpeedLabel);
+
+    [els.seqA, els.seqB, els.matchScore, els.mismatchScore, els.gapScore].forEach((input) => {
+      input.addEventListener("input", () => {
+        validateInputs();
+        if (state.phase === "idle") renderInitialMatrix();
+      });
+      input.addEventListener("blur", () => {
+        if (input === els.seqA || input === els.seqB) input.value = sanitizeInput(input.value);
+      });
+    });
+
+    updateSpeedLabel();
+    validateInputs();
+    renderInitialMatrix();
+    updateButtons();
+  </script>
+</body>
+</html>
