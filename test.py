@@ -1,88 +1,101 @@
 # -*- coding: utf-8 -*-
 
+from dataclasses import FrozenInstanceError
 import unittest
 
-from algorithm import SmithWatermanAlgorithm
+import numpy as np
+
+from algorithm import ScoringScheme, smith_waterman
 
 
-class SmithWatermanAlgorithmTestCase(unittest.TestCase):
-    def test_alpha(self):
-        qry = "CTTGACGTGTTTATGTATTCTTTTGCCAGTATATATTCTACACACCATATTATCTGCTGCAACCAAAAGACACAATGTTC"
-        ref = "CCGCTTTTAAGGGCTATATCCGTCCCTAGACCAATATAATAGTTCGTCTATGTGATCTCTTGAATTACGCATTCTATTGG"
-        smith_waterman_algorithm = SmithWatermanAlgorithm(qry, ref)
-        self.assertEqual(smith_waterman_algorithm.get_qry_begin_index(), 5)
-        self.assertEqual(smith_waterman_algorithm.get_qry_final_index(), 65)
-        self.assertEqual(smith_waterman_algorithm.get_ref_begin_index(), 1)
-        self.assertEqual(smith_waterman_algorithm.get_ref_final_index(), 71)
+class SmithWatermanTestCase(unittest.TestCase):
+    def test_finds_best_local_alignment_for_simple_sequences(self):
+        result = smith_waterman("AACCGGTT", "TTCCGGAA")
 
-    def test_beta(self):
-        qry = "GTAGCTAGAGGTGAGACCCCCGTAAACACCAGCAATGGCAGGATTAAGAGAAGTAGAAGTAGGGGCCGGAGATCCGTCCT"
-        ref = "AACATTCTAGATAGTTACTGCAGCGCCCATTGTTCTGGACTAGTGCCTTGTGTGAGAATTCGGAGGTTCCGGGCCAAATC"
-        smith_waterman_algorithm = SmithWatermanAlgorithm(qry, ref)
-        self.assertEqual(smith_waterman_algorithm.get_qry_begin_index(), 4)
-        self.assertEqual(smith_waterman_algorithm.get_qry_final_index(), 74)
-        self.assertEqual(smith_waterman_algorithm.get_ref_begin_index(), 6)
-        self.assertEqual(smith_waterman_algorithm.get_ref_final_index(), 80)
+        self.assertEqual(result.query_alignment, "CCGG")
+        self.assertEqual(result.reference_alignment, "CCGG")
+        self.assertEqual(result.query_span, (2, 6))
+        self.assertEqual(result.reference_span, (2, 6))
+        self.assertEqual(result.score, 12)
+        self.assertEqual(result.matches, 4)
+        self.assertEqual(result.mismatches, 0)
+        self.assertEqual(result.gaps, 0)
 
-    def test_gamma(self):
-        qry = "ATAAATGATGGGAACGAGATCCCGGAGGCTCGGATTGGTATGACAAGGTGTATCGTGATCGTCGGTGCGTCAGCTTGGGC"
-        ref = "GGTAAGGTATAGCTGCATCCTACTTACGATGTGAAGTTACACACCTCAACTCCAGAGTCCCGTTGGGGGAGTGTATTTTT"
-        smith_waterman_algorithm = SmithWatermanAlgorithm(qry, ref)
-        qry_begin_index = smith_waterman_algorithm.get_qry_begin_index()
-        qry_final_index = smith_waterman_algorithm.get_qry_final_index()
-        ref_begin_index = smith_waterman_algorithm.get_ref_begin_index()
-        ref_final_index = smith_waterman_algorithm.get_ref_final_index()
-        self.assertEqual(smith_waterman_algorithm.get_qry_begin_index(), 10)
-        self.assertEqual(smith_waterman_algorithm.get_qry_final_index(), 76)
-        self.assertEqual(smith_waterman_algorithm.get_ref_begin_index(), 5)
-        self.assertEqual(smith_waterman_algorithm.get_ref_final_index(), 74)
+    def test_supports_gap_in_best_alignment(self):
+        result = smith_waterman(
+            "ACGT",
+            "AGT",
+            ScoringScheme(match=3, mismatch=-3, gap=-2),
+        )
 
-        qry_alignment = smith_waterman_algorithm.get_qry_alignment()
-        ref_alignment = smith_waterman_algorithm.get_ref_alignment()
-        qry_matching = qry[:qry_begin_index] + " (" + qry_alignment + ") " + qry[qry_final_index:]
-        ref_matching = ref[:ref_begin_index] + " (" + ref_alignment + ") " + ref[ref_final_index:]
+        self.assertEqual(result.query_alignment, "ACGT")
+        self.assertEqual(result.reference_alignment, "A-GT")
+        self.assertEqual(result.query_span, (0, 4))
+        self.assertEqual(result.reference_span, (0, 3))
+        self.assertEqual(result.score, 7)
+        self.assertEqual(result.matches, 3)
+        self.assertEqual(result.mismatches, 0)
+        self.assertEqual(result.gaps, 1)
 
-        print("\nHere are the details of sequence matching:")
-        # ATAAATGATG (GG-A-A-C-GAGATCCCGGAGGCT--CGGAT-TG--GTATGACA-AGGTGTA-TCGTGA-TC--GTCGGTGCGTCAGCT-T) GGGC
-        #      GGTAA (GGTATAGCTGC-ATCCT--A--CTTACG-ATGTGAAGT-T-ACACACCTCAACTCCAGAGTCCCGTTGGGG-G--AG-TGT) ATTTTT
-        if qry_begin_index == ref_begin_index:
-            print(qry_matching)
-            print(ref_matching)
-        elif qry_begin_index < ref_begin_index:
-            print(" " * (ref_begin_index - qry_begin_index) + qry_matching)
-            print(ref_matching)
-        elif qry_begin_index > ref_begin_index:
-            print(qry_matching)
-            print(" " * (qry_begin_index - ref_begin_index) + ref_matching)
+    def test_returns_empty_alignment_when_no_positive_score_exists(self):
+        result = smith_waterman("AAAA", "TTTT")
 
-    def test_delta(self):
-        qry = "GTGGCAACATCTCACAATTGCCAGTTAACGTCTTCCTTCTCTCTCTGTCATAGGGACTCTGGATCCCAGAAGGTGAGAAAGTTAAAATTCCCGTCGCTATCA" \
-              "AGGAATTAAGAGAAGCAACATCTCCGGAAGCCAACAAGGAAATCCTCGATGTGAG"
-        ref = "GTGGCAcCATCTCACAATTGCCAGTTAACGTCTTCCTTCTCTCTCTGTCATAGGGACTCTGGATCCCAGAAGGTGAGAAAGTTAAAATTCCCGTCGCTATCA" \
-              "AGGAATTAAGAGAAGCAACATCTCCGaAAGCCAACAAGGAAATCCTCGATGTGAG"
-        smith_waterman_algorithm = SmithWatermanAlgorithm(qry, ref)
-        qry_begin_index = smith_waterman_algorithm.get_qry_begin_index()
-        qry_final_index = smith_waterman_algorithm.get_qry_final_index()
-        ref_begin_index = smith_waterman_algorithm.get_ref_begin_index()
-        ref_final_index = smith_waterman_algorithm.get_ref_final_index()
+        self.assertEqual(result.query_alignment, "")
+        self.assertEqual(result.reference_alignment, "")
+        self.assertEqual(result.query_span, (0, 0))
+        self.assertEqual(result.reference_span, (0, 0))
+        self.assertEqual(result.score, 0)
+        self.assertEqual(result.matches, 0)
+        self.assertEqual(result.mismatches, 0)
+        self.assertEqual(result.gaps, 0)
 
-        qry_alignment = smith_waterman_algorithm.get_qry_alignment()
-        ref_alignment = smith_waterman_algorithm.get_ref_alignment()
-        qry_matching = qry[:qry_begin_index] + " (" + qry_alignment + ") " + qry[qry_final_index:]
-        ref_matching = ref[:ref_begin_index] + " (" + ref_alignment + ") " + ref[ref_final_index:]
+    def test_handles_empty_sequences(self):
+        result = smith_waterman("", "ACGT")
 
-        print("\nHere are the details of sequence matching:")
-        if qry_begin_index == ref_begin_index:
-            print(qry_matching)
-            print(ref_matching)
-        elif qry_begin_index < ref_begin_index:
-            print(" " * (ref_begin_index - qry_begin_index) + qry_matching)
-            print(ref_matching)
-        elif qry_begin_index > ref_begin_index:
-            print(qry_matching)
-            print(" " * (qry_begin_index - ref_begin_index) + ref_matching)
+        self.assertEqual(result.query_alignment, "")
+        self.assertEqual(result.reference_alignment, "")
+        self.assertEqual(result.query_span, (0, 0))
+        self.assertEqual(result.reference_span, (0, 0))
+        self.assertEqual(result.score, 0)
+        self.assertEqual(result.scoring_matrix.shape, (1, 5))
 
-        self.assertEqual(qry_begin_index, 0)
-        self.assertEqual(qry_final_index, 157)
-        self.assertEqual(ref_begin_index, 0)
-        self.assertEqual(ref_final_index, 157)
+    def test_exposes_numpy_int64_scoring_matrix(self):
+        result = smith_waterman("GATTACA", "GCATGCU")
+
+        self.assertIsInstance(result.scoring_matrix, np.ndarray)
+        self.assertEqual(result.scoring_matrix.dtype, np.dtype("int64"))
+        self.assertEqual(result.scoring_matrix.shape, (8, 8))
+        self.assertEqual(result.scoring_matrix.max(), result.score)
+
+    def test_returns_read_only_result(self):
+        result = smith_waterman("ACGT", "ACGT")
+
+        with self.assertRaises(FrozenInstanceError):
+            result.score = 0
+
+        with self.assertRaises(ValueError):
+            result.scoring_matrix[1, 1] = 99
+
+    def test_rejects_invalid_scoring_scheme(self):
+        with self.assertRaisesRegex(ValueError, "match must be positive"):
+            ScoringScheme(match=0)
+
+        with self.assertRaisesRegex(ValueError, "mismatch must be negative"):
+            ScoringScheme(mismatch=0)
+
+        with self.assertRaisesRegex(ValueError, "gap must be negative"):
+            ScoringScheme(gap=0)
+
+    def test_preserves_long_sequence_regression_bounds(self):
+        query = "CTTGACGTGTTTATGTATTCTTTTGCCAGTATATATTCTACACACCATATTATCTGCTGCAACCAAAAGACACAATGTTC"
+        reference = "CCGCTTTTAAGGGCTATATCCGTCCCTAGACCAATATAATAGTTCGTCTATGTGATCTCTTGAATTACGCATTCTATTGG"
+
+        result = smith_waterman(query, reference)
+
+        self.assertEqual(result.query_span, (5, 65))
+        self.assertEqual(result.reference_span, (1, 71))
+        self.assertEqual(len(result.query_alignment), len(result.reference_alignment))
+
+
+if __name__ == "__main__":
+    unittest.main()

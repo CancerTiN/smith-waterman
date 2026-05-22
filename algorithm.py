@@ -1,84 +1,161 @@
 # -*- coding: utf-8 -*-
 
-import itertools
+from dataclasses import dataclass, field
+from typing import Tuple
 
 import numpy as np
 
 
-class SmithWatermanAlgorithm(object):
-    _GAP_BASE = "-"
+GAP = "-"
 
-    def __init__(self, qry: str, ref: str, match_score: int = 3, gap_cost: int = 2):
-        self._qry = qry
-        self._ref = ref
-        self._match_score = match_score
-        self._gap_cost = gap_cost
-        self._n_match = 0
-        self._n_mismatch = 0
-        self._n_gap = 0
-        self._H = np.zeros((len(self._qry) + 1, len(self._ref) + 1), np.int)
-        self._construct()
-        self._traversal()
 
-    def get_scoring_matrix(self):
-        return self._H
+@dataclass(frozen=True)
+class ScoringScheme:
+    """Scoring parameters for Smith-Waterman local alignment."""
 
-    def get_qry_alignment(self):
-        return "".join(self._qry_bases)
+    match: int = 3
+    mismatch: int = -3
+    gap: int = -2
 
-    def get_ref_alignment(self):
-        return "".join(self._ref_bases)
+    def __post_init__(self) -> None:
+        if self.match <= 0:
+            raise ValueError("match must be positive")
+        if self.mismatch >= 0:
+            raise ValueError("mismatch must be negative")
+        if self.gap >= 0:
+            raise ValueError("gap must be negative")
 
-    def get_qry_begin_index(self):
-        return self._begin_i
 
-    def get_ref_begin_index(self):
-        return self._begin_j
+@dataclass(frozen=True)
+class AlignmentResult:
+    """The best local alignment and its coordinates."""
 
-    def get_qry_final_index(self):
-        return self._final_i
+    query_alignment: str
+    reference_alignment: str
+    query_start: int
+    query_end: int
+    reference_start: int
+    reference_end: int
+    score: int
+    scoring_matrix: np.ndarray = field(repr=False, compare=False)
 
-    def get_ref_final_index(self):
-        return self._final_j
+    @property
+    def query_span(self) -> Tuple[int, int]:
+        return self.query_start, self.query_end
 
-    def _construct(self):
-        for i, j in itertools.product(range(1, self._H.shape[0]), range(1, self._H.shape[1])):
-            match = self._H[i - 1, j - 1] + (
-                self._match_score if self._qry[i - 1] == self._ref[j - 1] else - self._match_score
-            )
-            insert = self._H[i - 1, j] - self._gap_cost
-            delete = self._H[i, j - 1] - self._gap_cost
-            self._H[i, j] = max(match, insert, delete, 0)
+    @property
+    def reference_span(self) -> Tuple[int, int]:
+        return self.reference_start, self.reference_end
 
-    def _traversal(self):
-        self._qry_bases = list()
-        self._ref_bases = list()
-        self._begin_i, self._begin_j = 0, 0
-        self._final_i, self._final_j = np.unravel_index(self._H.argmax(), self._H.shape)
-        self._traceback(self._final_i, self._final_j)
+    @property
+    def matches(self) -> int:
+        return sum(
+            query_base == reference_base != GAP
+            for query_base, reference_base in zip(self.query_alignment, self.reference_alignment)
+        )
 
-    def _traceback(self, i: int, j: int):
-        if self._H[i, j] == 0:
-            self._begin_i = i
-            self._begin_j = j
-            return
-        qry_base = self._qry[i - 1]
-        ref_base = self._ref[j - 1]
-        if self._H[i, j] == self._H[i - 1, j] - self._gap_cost:  # insert
-            self._qry_bases.insert(0, qry_base)
-            self._ref_bases.insert(0, self._GAP_BASE)
-            self._n_gap += 1
-            self._traceback(i - 1, j)
-        elif self._H[i, j] == self._H[i, j - 1] - self._gap_cost:  # delete
-            self._qry_bases.insert(0, self._GAP_BASE)
-            self._ref_bases.insert(0, ref_base)
-            self._n_gap += 1
-            self._traceback(i, j - 1)
-        elif self._H[i, j] in (self._H[i - 1, j - 1] + self._match_score, self._H[i - 1, j - 1] - self._match_score):
-            self._qry_bases.insert(0, qry_base)
-            self._ref_bases.insert(0, ref_base)
-            if qry_base == ref_base:
-                self._n_match += 1
-            else:
-                self._n_mismatch += 1
-            self._traceback(i - 1, j - 1)
+    @property
+    def mismatches(self) -> int:
+        return sum(
+            query_base != reference_base and query_base != GAP and reference_base != GAP
+            for query_base, reference_base in zip(self.query_alignment, self.reference_alignment)
+        )
+
+    @property
+    def gaps(self) -> int:
+        return sum(
+            query_base == GAP or reference_base == GAP
+            for query_base, reference_base in zip(self.query_alignment, self.reference_alignment)
+        )
+
+
+def smith_waterman(
+    query: str,
+    reference: str,
+    scoring: ScoringScheme = ScoringScheme(),
+) -> AlignmentResult:
+    """Return the highest-scoring Smith-Waterman local alignment."""
+
+    matrix = _build_scoring_matrix(query, reference, scoring)
+    score, end_i, end_j = _find_best_cell(matrix)
+    query_alignment, reference_alignment, start_i, start_j = _traceback(
+        query,
+        reference,
+        matrix,
+        scoring,
+        end_i,
+        end_j,
+    )
+    matrix.setflags(write=False)
+
+    return AlignmentResult(
+        query_alignment=query_alignment,
+        reference_alignment=reference_alignment,
+        query_start=start_i,
+        query_end=end_i,
+        reference_start=start_j,
+        reference_end=end_j,
+        score=score,
+        scoring_matrix=matrix,
+    )
+
+
+def _build_scoring_matrix(query: str, reference: str, scoring: ScoringScheme) -> np.ndarray:
+    matrix = np.zeros((len(query) + 1, len(reference) + 1), dtype=np.int64)
+
+    for i, query_base in enumerate(query, start=1):
+        for j, reference_base in enumerate(reference, start=1):
+            substitution = scoring.match if query_base == reference_base else scoring.mismatch
+            diagonal = matrix[i - 1, j - 1] + substitution
+            up = matrix[i - 1, j] + scoring.gap
+            left = matrix[i, j - 1] + scoring.gap
+            matrix[i, j] = max(0, diagonal, up, left)
+
+    return matrix
+
+
+def _find_best_cell(matrix: np.ndarray) -> Tuple[int, int, int]:
+    row, column = np.unravel_index(int(matrix.argmax()), matrix.shape)
+    return int(matrix[row, column]), int(row), int(column)
+
+
+def _traceback(
+    query: str,
+    reference: str,
+    matrix: np.ndarray,
+    scoring: ScoringScheme,
+    end_i: int,
+    end_j: int,
+) -> Tuple[str, str, int, int]:
+    query_alignment = []
+    reference_alignment = []
+    i = end_i
+    j = end_j
+
+    while i > 0 and j > 0 and matrix[i, j] > 0:
+        query_base = query[i - 1]
+        reference_base = reference[j - 1]
+        substitution = scoring.match if query_base == reference_base else scoring.mismatch
+
+        if matrix[i, j] == matrix[i - 1, j - 1] + substitution:
+            query_alignment.append(query_base)
+            reference_alignment.append(reference_base)
+            i -= 1
+            j -= 1
+        elif matrix[i, j] == matrix[i - 1, j] + scoring.gap:
+            query_alignment.append(query_base)
+            reference_alignment.append(GAP)
+            i -= 1
+        elif matrix[i, j] == matrix[i, j - 1] + scoring.gap:
+            query_alignment.append(GAP)
+            reference_alignment.append(reference_base)
+            j -= 1
+        else:
+            break
+
+    return (
+        "".join(reversed(query_alignment)),
+        "".join(reversed(reference_alignment)),
+        i,
+        j,
+    )
