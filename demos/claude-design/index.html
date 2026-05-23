@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smith-Waterman · 随机风格入口</title>
+<style>
+  :root {
+    --ink: #16110c;
+    --muted: #6f6254;
+    --paper: #f5efe4;
+    --panel: #fffaf0;
+    --rule: #2a2118;
+    --accent: #b73525;
+    --gold: #c6912c;
+    --green: #506f34;
+    --blue: #223e5c;
+    --shadow: 0 24px 70px rgba(42, 33, 24, 0.16);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: Avenir Next, Trebuchet MS, Verdana, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: var(--sans);
+    background:
+      linear-gradient(120deg, rgba(183, 53, 37, 0.12), transparent 32%),
+      linear-gradient(240deg, rgba(34, 62, 92, 0.16), transparent 38%),
+      radial-gradient(circle at 22% 22%, rgba(198, 145, 44, 0.22), transparent 30%),
+      var(--paper);
+  }
+
+  main {
+    width: min(1040px, calc(100% - 32px));
+    min-height: 100vh;
+    margin: 0 auto;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    padding: 40px 0 28px;
+  }
+
+  .hero {
+    display: grid;
+    align-content: center;
+    gap: 26px;
+  }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  h1 {
+    max-width: 860px;
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 82px;
+    line-height: 0.92;
+    letter-spacing: 0;
+  }
+
+  .intro {
+    max-width: 660px;
+    margin: 0;
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1.7;
+  }
+
+  .chooser {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .card {
+    display: grid;
+    min-height: 190px;
+    padding: 18px;
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid rgba(42, 33, 24, 0.28);
+    background: rgba(255, 250, 240, 0.74);
+    box-shadow: var(--shadow);
+    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+  }
+
+  .card:hover,
+  .card.selected {
+    transform: translateY(-4px);
+    border-color: var(--rule);
+    background: var(--panel);
+  }
+
+  .card.selected {
+    outline: 3px solid rgba(183, 53, 37, 0.18);
+  }
+
+  .card small {
+    font-family: var(--mono);
+    color: var(--muted);
+  }
+
+  .card b {
+    align-self: center;
+    font-family: var(--serif);
+    font-size: 34px;
+    line-height: 1;
+  }
+
+  .card span {
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .paper b { color: var(--accent); }
+  .terminal b { color: var(--green); font-family: var(--mono); font-size: 28px; }
+  .editorial b { color: var(--blue); font-family: var(--sans); font-weight: 900; }
+
+  .action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  button,
+  .manual-link {
+    appearance: none;
+    border: 1px solid var(--rule);
+    background: var(--ink);
+    color: var(--paper);
+    cursor: pointer;
+    min-height: 44px;
+    padding: 10px 15px;
+    font: 700 13px var(--mono);
+    text-decoration: none;
+  }
+
+  button.secondary {
+    background: transparent;
+    color: var(--ink);
+  }
+
+  .status {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+
+  footer {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  @media (max-width: 760px) {
+    main { width: min(100% - 22px, 1040px); padding-top: 24px; }
+    h1 { font-size: 48px; }
+    .chooser { grid-template-columns: 1fr; }
+    .card { min-height: 150px; }
+  }
+</style>
+</head>
+<body>
+  <main>
+    <section class="hero" aria-labelledby="title">
+      <p class="kicker">Random visual shell for Smith-Waterman</p>
+      <h1 id="title">每次进入，换一种算法剧场。</h1>
+      <p class="intro">
+        这个入口会在论文版、终端调试器、编辑专题三种 Claude Design 风格之间随机选择一个。
+        若连续打开，它会尽量避开上一次的风格，让体验更像抽卡。
+      </p>
+
+      <div class="chooser" id="chooser" aria-label="可用风格">
+        <a class="card paper" href="v1-paper.html" data-style="paper">
+          <small>v1</small>
+          <b>论文版</b>
+          <span>纸张、注释、经典教学讲义的气质。</span>
+        </a>
+        <a class="card terminal" href="v2-terminal.html" data-style="terminal">
+          <small>v2</small>
+          <b>terminal</b>
+          <span>像在调试动态规划内核，冷静而锋利。</span>
+        </a>
+        <a class="card editorial" href="v3-editorial.html" data-style="editorial">
+          <small>v3</small>
+          <b>编辑专题</b>
+          <span>杂志式排版，强调节奏和视觉冲击。</span>
+        </a>
+      </div>
+
+      <div class="action-row">
+        <button type="button" id="enterBtn">立即进入随机风格</button>
+        <button type="button" class="secondary" id="rerollBtn">重新抽一个</button>
+        <span class="status" id="status" aria-live="polite">正在选择风格...</span>
+      </div>
+    </section>
+
+    <footer>
+      手动选择任一卡片会直接进入对应风格。随机入口只负责选择页面，算法和交互仍由各风格页共享的 sw-core.js 驱动。
+    </footer>
+  </main>
+
+  <script>
+    const styles = [
+      { key: "paper", href: "v1-paper.html", label: "论文版" },
+      { key: "terminal", href: "v2-terminal.html", label: "终端调试器" },
+      { key: "editorial", href: "v3-editorial.html", label: "编辑专题" }
+    ];
+
+    const storageKey = "smith-waterman:last-random-style";
+    const statusEl = document.getElementById("status");
+    const enterBtn = document.getElementById("enterBtn");
+    const rerollBtn = document.getElementById("rerollBtn");
+    let selected = pickStyle();
+
+    function pickStyle() {
+      const last = readLastStyle();
+      const pool = styles.filter((style) => style.key !== last);
+      const choices = pool.length ? pool : styles;
+      const bytes = new Uint32Array(1);
+      crypto.getRandomValues(bytes);
+      const style = choices[bytes[0] % choices.length];
+      writeLastStyle(style.key);
+      return style;
+    }
+
+    function readLastStyle() {
+      try { return localStorage.getItem(storageKey); }
+      catch (_) { return ""; }
+    }
+
+    function writeLastStyle(key) {
+      try { localStorage.setItem(storageKey, key); }
+      catch (_) {}
+    }
+
+    function renderSelection() {
+      document.querySelectorAll(".card").forEach((card) => {
+        card.classList.toggle("selected", card.dataset.style === selected.key);
+      });
+      statusEl.textContent = `本次选择：${selected.label}`;
+    }
+
+    function enterSelected() {
+      const url = new URL(selected.href, window.location.href);
+      url.searchParams.set("style", selected.key);
+      url.searchParams.set("from", "random");
+      location.href = url.href;
+    }
+
+    enterBtn.addEventListener("click", enterSelected);
+    rerollBtn.addEventListener("click", () => {
+      selected = pickStyle();
+      renderSelection();
+    });
+
+    renderSelection();
+    window.setTimeout(enterSelected, 900);
+  </script>
+</body>
+</html>

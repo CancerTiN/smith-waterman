@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>smith_waterman.c · 调试器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0b0f14;
+    --bg-2:      #11161d;
+    --bg-3:      #161c24;
+    --bg-4:      #1d2530;
+    --line:      #232d3a;
+    --line-2:    #2b3645;
+    --fg:        #d7dde5;
+    --fg-2:      #aab4c2;
+    --muted:     #6b7989;
+    --dim:       #4a5462;
+
+    --amber:     #ffb454;
+    --amber-d:   #ffd599;
+    --green:     #7ed26b;
+    --cyan:      #5fc8d6;
+    --magenta:   #d678c6;
+    --red:       #ff6e6e;
+    --blue:      #6ea6ff;
+    --violet:    #a99bff;
+
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); }
+  body {
+    margin: 0;
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.5;
+    font-variant-ligatures: contextual;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select { font: inherit; color: inherit; }
+
+  /* ===== window chrome ===== */
+  .window {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .titlebar {
+    height: 36px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    padding: 0 14px;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .traffic { display: flex; gap: 8px; }
+  .traffic span {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #3a4452; border: 1px solid #2a323e;
+  }
+  .traffic span:nth-child(1) { background: #e06464; border-color: #b04a4a; }
+  .traffic span:nth-child(2) { background: #e4a751; border-color: #a87833; }
+  .traffic span:nth-child(3) { background: #79c45a; border-color: #4d8a3a; }
+  .tab-strip { display: flex; gap: 1px; height: 100%; align-items: stretch; }
+  .tab {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 14px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    border-right: 1px solid var(--line);
+    cursor: default;
+  }
+  .tab.active {
+    background: var(--bg);
+    color: var(--fg);
+    border-top: 1px solid var(--amber);
+    margin-top: -1px;
+    padding-top: 1px;
+  }
+  .tab .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
+  .tab.active .dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .titlebar-right {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 11px; color: var(--muted);
+  }
+
+  /* ===== breadcrumb ===== */
+  .breadcrumb {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--line);
+    padding: 6px 16px;
+    font-size: 11.5px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .breadcrumb b { color: var(--amber); font-weight: 500; }
+  .breadcrumb .sep { color: var(--dim); }
+  .breadcrumb .grow { flex: 1; }
+  .run-state {
+    font-size: 11px;
+    padding: 3px 10px 3px 22px;
+    border: 1px solid var(--line-2);
+    background: var(--bg-3);
+    color: var(--fg-2);
+    position: relative;
+    border-radius: 2px;
+  }
+  .run-state::before {
+    content: "";
+    position: absolute;
+    left: 8px; top: 50%;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transform: translateY(-50%);
+  }
+  .run-state[data-phase="fill"] { color: var(--amber); border-color: #5a3e1d; }
+  .run-state[data-phase="fill"]::before { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: blink 1s infinite; }
+  .run-state[data-phase="traceback"] { color: var(--red); border-color: #5a2a2a; }
+  .run-state[data-phase="traceback"]::before { background: var(--red); box-shadow: 0 0 6px var(--red); animation: blink 0.8s infinite; }
+  .run-state[data-phase="done"] { color: var(--green); border-color: #2a4a2a; }
+  .run-state[data-phase="done"]::before { background: var(--green); }
+  @keyframes blink { 50% { opacity: 0.4; } }
+
+  /* ===== body ===== */
+  .body {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr) 340px;
+    flex: 1;
+  }
+
+  /* ===== left rail ===== */
+  .rail {
+    background: var(--bg-2);
+    border-right: 1px solid var(--line);
+    padding: 14px 0;
+    font-size: 11px;
+  }
+  .rail-section {
+    padding: 14px 16px 8px;
+    color: var(--dim);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-size: 10px;
+  }
+  .rail ul { list-style: none; padding: 0; margin: 0; }
+  .rail li {
+    padding: 5px 16px 5px 24px;
+    color: var(--fg-2);
+    position: relative;
+    cursor: default;
+  }
+  .rail li::before {
+    content: "▾";
+    position: absolute;
+    left: 11px; top: 5px;
+    color: var(--dim);
+    font-size: 9px;
+  }
+  .rail li.leaf::before { content: "·"; color: var(--dim); font-size: 14px; top: 3px; }
+  .rail li.active {
+    color: var(--amber);
+    background: linear-gradient(90deg, rgba(255,180,84,0.08), transparent);
+    border-left: 2px solid var(--amber);
+    padding-left: 22px;
+  }
+  .rail li .ln {
+    float: right; color: var(--dim); font-size: 10px;
+  }
+
+  /* ===== main editor area ===== */
+  .editor {
+    background: var(--bg);
+    padding: 16px 22px 24px;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .heading-block {
+    margin-bottom: 18px;
+  }
+  .ascii-banner {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.1;
+    color: var(--dim);
+    margin-bottom: 14px;
+    white-space: pre;
+  }
+  .ascii-banner b { color: var(--amber); font-weight: 500; }
+  h1.kernel-name {
+    margin: 0;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 32px;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+  }
+  h1.kernel-name .at { color: var(--magenta); font-weight: 500; }
+  h1.kernel-name .lparen { color: var(--dim); font-weight: 400; }
+  h1.kernel-name .arg { color: var(--green); font-weight: 500; }
+  h1.kernel-name .rparen { color: var(--dim); font-weight: 400; }
+  .doc {
+    margin-top: 10px;
+    color: var(--fg-2);
+    font-size: 13px;
+    line-height: 1.65;
+    max-width: 780px;
+  }
+  .doc .c { color: var(--dim); }
+  .doc em { color: var(--amber); font-style: normal; }
+
+  /* ===== section dividers ===== */
+  .sec {
+    display: flex; align-items: center; gap: 12px;
+    margin: 26px 0 14px;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .sec::before { content: ""; flex: 0 0 24px; height: 1px; background: var(--line-2); }
+  .sec::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
+  .sec b { color: var(--amber); font-weight: 700; }
+
+  /* ===== panels ===== */
+  .panel {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+  }
+  .panel-h {
+    padding: 8px 14px;
+    background: var(--bg-3);
+    border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .panel-h b { color: var(--fg); font-weight: 600; letter-spacing: 0.02em; text-transform: none; font-size: 12.5px; }
+  .panel-b { padding: 14px; }
+
+  /* ===== controls ===== */
+  .ctl-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1.1fr;
+    gap: 0;
+  }
+  .ctl-cell { padding: 16px; border-right: 1px solid var(--line); }
+  .ctl-cell:last-child { border-right: 0; }
+
+  .field-grid { display: grid; gap: 12px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  label.lbl {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  label.lbl .k { color: var(--cyan); text-transform: none; letter-spacing: 0; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line-2);
+    color: var(--fg);
+    padding: 7px 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    outline: none;
+    border-radius: 2px;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  input[type="text"] { color: var(--green); letter-spacing: 0.06em; font-weight: 500; }
+  input[type="number"] { color: var(--amber); }
+  input:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
+  input.invalid { border-color: var(--red); color: var(--red); box-shadow: 0 0 0 1px rgba(255,110,110,0.3); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .err {
+    min-height: 18px; font-size: 11.5px; color: var(--red);
+  }
+  .err:not(:empty)::before { content: "✗ "; color: var(--red); }
+
+  .scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+  input[type="range"] {
+    -webkit-appearance: none; width: 100%; background: transparent; height: 16px; margin: 4px 0;
+  }
+  input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: var(--line-2); }
+  input[type="range"]::-moz-range-track { height: 2px; background: var(--line-2); }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px;
+    background: var(--amber); border: 0; border-radius: 0;
+    margin-top: -5px;
+  }
+  input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: var(--amber); border: 0; border-radius: 0; }
+
+  .speed-row {
+    display: flex; justify-content: space-between;
+    font-size: 11px;
+  }
+  .speed-row span:last-child { color: var(--amber); }
+
+  .check {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; color: var(--fg-2);
+    margin-top: 4px;
+    cursor: pointer;
+  }
+  .check input { width: 13px; height: 13px; accent-color: var(--amber); }
+
+  .ex-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .pill {
+    background: var(--bg-3);
+    border: 1px solid var(--line-2);
+    color: var(--cyan);
+    padding: 4px 9px;
+    font-size: 11px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 120ms;
+  }
+  .pill:hover { background: var(--bg-4); border-color: var(--cyan); }
+  .pill::before { content: "▶ "; color: var(--dim); }
+  .hint { font-size: 11px; color: var(--muted); }
+
+  .btn {
+    background: var(--bg-3);
+    border: 1px solid var(--line-2);
+    color: var(--fg);
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 120ms ease;
+  }
+  .btn:hover:not(:disabled) { background: var(--bg-4); border-color: var(--fg-2); }
+  .btn.primary {
+    background: rgba(255, 180, 84, 0.14);
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .btn.primary:hover:not(:disabled) { background: rgba(255, 180, 84, 0.24); }
+  .btn.primary::before { content: "▶ "; }
+  .btn.danger { color: var(--red); border-color: rgba(255,110,110,0.35); }
+  .btn.danger:hover:not(:disabled) { background: rgba(255,110,110,0.12); border-color: var(--red); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .ctl-hint { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.55; }
+
+  /* ===== matrix ===== */
+  .matrix-block { margin-top: 8px; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    font-size: 10.5px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    border-bottom: 0;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 10px; height: 10px; display: inline-block; border: 1px solid var(--line-2); }
+  .sw.cur { background: rgba(255,180,84,0.5); border-color: var(--amber); }
+  .sw.dep { background: rgba(110,166,255,0.25); border-color: var(--blue); }
+  .sw.tr  { background: rgba(126,210,107,0.25); border-color: var(--green); }
+  .sw.mx  { background: rgba(214,120,198,0.3); border-color: var(--magenta); }
+
+  .matrix-scroll {
+    position: relative;
+    overflow: auto;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    padding: 18px 16px;
+    max-height: 540px;
+  }
+  .matrix-wrap { position: relative; display: inline-block; min-width: 100%; }
+  svg.trace-overlay { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 4; }
+  .trace-overlay line { stroke: var(--green); stroke-width: 2; stroke-linecap: round; opacity: 0.85; filter: drop-shadow(0 0 4px var(--green)); }
+
+  table.matrix {
+    border-collapse: separate;
+    border-spacing: 2px;
+    table-layout: fixed;
+  }
+  .matrix th, .matrix td {
+    position: relative;
+    width: 46px; min-width: 46px; height: 40px;
+    text-align: center; vertical-align: middle;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--fg-2);
+    transition: background 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+  .matrix th {
+    background: var(--bg-3);
+    color: var(--cyan);
+    font-weight: 600;
+  }
+  .matrix th.corner { background: var(--bg); color: var(--dim); }
+  .matrix td.pending { color: var(--dim); background: transparent; border-color: var(--bg-3); }
+  .matrix td.initialized { color: var(--muted); background: var(--bg-2); }
+  .matrix td.filled { color: var(--fg); background: var(--bg-3); }
+
+  .matrix td.dependency {
+    background: rgba(110,166,255,0.15);
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+  .matrix th.active-label {
+    background: rgba(255, 180, 84, 0.25);
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .matrix td.current {
+    background: rgba(255,180,84,0.35);
+    border-color: var(--amber);
+    color: var(--amber-d);
+    font-weight: 700;
+    box-shadow: 0 0 0 1px var(--amber), 0 0 12px rgba(255,180,84,0.4);
+    transform: scale(1.08);
+    z-index: 2;
+  }
+  .matrix td.max-cell {
+    background: rgba(214,120,198,0.22);
+    border-color: var(--magenta);
+    color: var(--magenta);
+    font-weight: 700;
+    box-shadow: inset 0 0 0 1px var(--magenta);
+  }
+  .matrix td.trace-cell {
+    background: rgba(126,210,107,0.22);
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .matrix td.trace-current {
+    box-shadow: inset 0 0 0 2px var(--red), 0 0 10px rgba(255,110,110,0.5);
+  }
+  .matrix td.stop-cell {
+    background: rgba(255,110,110,0.18);
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .matrix td.flash { animation: termflash 600ms ease-in-out 2; }
+  @keyframes termflash {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.13); box-shadow: 0 0 0 2px var(--magenta), 0 0 16px var(--magenta); }
+  }
+  .cell-arrow {
+    position: absolute; right: 3px; bottom: 2px;
+    font-size: 10px; color: var(--blue);
+    pointer-events: none;
+  }
+  .cell-star {
+    position: absolute; top: 1px; left: 3px;
+    font-size: 9px; color: var(--magenta);
+    pointer-events: none;
+    text-shadow: 0 0 4px var(--magenta);
+  }
+
+  /* ===== right panel ===== */
+  .right-rail {
+    background: var(--bg-2);
+    border-left: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pane {
+    border-bottom: 1px solid var(--line);
+  }
+  .pane:last-child { border-bottom: 0; }
+  .pane-h {
+    padding: 8px 14px;
+    background: var(--bg-3);
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .pane-h b { color: var(--fg); font-weight: 500; font-size: 12px; letter-spacing: 0.02em; text-transform: none; }
+  .pane-h .tag { color: var(--cyan); font-size: 10px; }
+  .pane-b { padding: 12px 14px; }
+
+  .formula-heading { margin: 0 0 8px; color: var(--fg-2); font-size: 12px; }
+  .formula-heading strong { color: var(--amber); font-weight: 600; }
+  .formula-list { display: grid; gap: 4px; margin: 6px 0 0; }
+  .formula-line {
+    background: var(--bg-3);
+    border-left: 2px solid var(--line-2);
+    color: var(--fg-2);
+    font-size: 11.5px;
+    padding: 5px 9px;
+    border-radius: 0 2px 2px 0;
+    white-space: pre-wrap;
+  }
+  .formula-line.chosen {
+    background: rgba(126, 210, 107, 0.14);
+    border-left-color: var(--green);
+    color: var(--green);
+    font-weight: 600;
+  }
+  .explain { margin: 0; font-size: 12px; color: var(--fg-2); line-height: 1.6; }
+  .explain + .explain { margin-top: 8px; }
+  .explain em { color: var(--amber); font-style: normal; }
+
+  /* ===== preview ===== */
+  .preview { margin-top: 18px; }
+  .preview-row {
+    display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;
+  }
+  .preview-status { font-size: 11px; color: var(--cyan); }
+  .context-box {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--cyan);
+    color: var(--fg-2);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 14px;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.7;
+  }
+  .context-box .selected {
+    background: rgba(255,180,84,0.22);
+    color: var(--amber-d);
+    border: 1px solid var(--amber);
+    padding: 0 3px;
+    font-weight: 600;
+  }
+  .alignment-box {
+    margin-top: 10px;
+    background: #06090d;
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--green);
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 14px 18px;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.7;
+    position: relative;
+  }
+  .alignment-box::before {
+    content: "$ stdout";
+    position: absolute; top: 6px; right: 12px;
+    color: var(--dim); font-size: 10px;
+  }
+
+  /* ===== result ===== */
+  .result-panel { margin-top: 20px; }
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin: 14px 0;
+  }
+  .metric {
+    background: var(--bg-2);
+    padding: 14px 16px;
+  }
+  .metric b {
+    display: block;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 28px;
+    color: var(--amber);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .metric span {
+    display: block;
+    color: var(--muted);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .copy-row { margin-top: 10px; }
+  .copy-row .btn { background: var(--bg-3); }
+
+  /* ===== status bar ===== */
+  .statusbar {
+    background: var(--bg-2);
+    border-top: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: auto auto auto 1fr auto auto;
+    gap: 14px;
+    align-items: center;
+    padding: 5px 14px;
+    font-size: 10.5px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .statusbar .seg { display: inline-flex; align-items: center; gap: 6px; }
+  .statusbar .seg b { color: var(--fg-2); font-weight: 500; }
+  .statusbar .copy-status { color: var(--green); }
+
+  /* ===== output console look (for inputs section) ===== */
+  .ctl-cell h3 {
+    margin: 0 0 12px;
+    font-size: 11px;
+    color: var(--amber);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ctl-cell h3::before { content: ""; width: 6px; height: 6px; background: var(--amber); }
+
+  .live-region { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+  <div class="window">
+    <!-- title bar -->
+    <div class="titlebar">
+      <div class="traffic"><span></span><span></span><span></span></div>
+      <div class="tab-strip">
+        <div class="tab active"><span class="dot"></span>smith_waterman.c</div>
+        <div class="tab">Makefile</div>
+        <div class="tab">scores.h</div>
+      </div>
+      <div class="titlebar-right">
+        <span>UTF-8</span><span>LF</span><span>C</span>
+      </div>
+    </div>
+
+    <!-- breadcrumb -->
+    <div class="breadcrumb">
+      <span>~/algos/alignment</span><span class="sep">›</span><span>local</span><span class="sep">›</span><b>smith_waterman.c</b><span class="sep">›</span><span>main()</span>
+      <span class="grow"></span>
+      <span>ƒ <b style="color:var(--cyan)">align_local</b>(seqA, seqB)</span>
+      <span class="run-state" id="phaseBadge" data-phase="idle">IDLE</span>
+    </div>
+
+    <!-- 3-col body -->
+    <div class="body">
+      <!-- left rail (project tree) -->
+      <nav class="rail">
+        <div class="rail-section">Sections</div>
+        <ul>
+          <li class="active">§ inputs &amp; params <span class="ln">L 14</span></li>
+          <li class="leaf">recurrence <span class="ln">L 38</span></li>
+          <li class="leaf">scoring matrix <span class="ln">L 62</span></li>
+          <li class="leaf">traceback <span class="ln">L 104</span></li>
+          <li class="leaf">result <span class="ln">L 140</span></li>
+        </ul>
+        <div class="rail-section">Globals</div>
+        <ul>
+          <li class="leaf">H[m+1][n+1]</li>
+          <li class="leaf">pointer[m+1][n+1]</li>
+          <li class="leaf">max_score</li>
+          <li class="leaf">SPEED · 5 steps</li>
+        </ul>
+        <div class="rail-section">Tie order</div>
+        <ul style="font-size:10.5px">
+          <li class="leaf" style="color:var(--blue)">↖ diag</li>
+          <li class="leaf" style="color:var(--blue)">↑ up</li>
+          <li class="leaf" style="color:var(--blue)">← left</li>
+          <li class="leaf" style="color:var(--red)">∅ none</li>
+        </ul>
+      </nav>
+
+      <!-- editor -->
+      <main class="editor">
+        <div class="heading-block">
+          <pre class="ascii-banner">┌──────────────────────────────────────────────────────────────┐
+│  <b>SMITH–WATERMAN</b>  ·  local sequence alignment debugger     │
+│  Smith T.F. &amp; Waterman M.S. — J. Mol. Biol. 147 (1981)       │
+└──────────────────────────────────────────────────────────────┘</pre>
+          <h1 class="kernel-name"><span class="at">def</span> align_local<span class="lparen">(</span><span class="arg">A, B, score</span><span class="rparen">)</span>:</h1>
+          <p class="doc">
+            <span class="c">// </span>填充 <em>H(i,j) = max{ 0, diag+s, up+gap, left+gap }</em>;<br>
+            <span class="c">// </span>从全矩阵最高分回溯,直到遇到 0 或矩阵边界。<br>
+            <span class="c">// </span>本调试器:先一次性求解再播放动画。可单步、可暂停、可调速。
+          </p>
+        </div>
+
+        <!-- inputs -->
+        <div class="sec"><b>§ 01</b><span>parameters</span></div>
+        <section class="panel">
+          <div class="panel-h"><b>// inputs &amp; scoring</b><span>5 fields · linear gap</span></div>
+          <div class="ctl-grid">
+            <div class="ctl-cell">
+              <h3>sequences</h3>
+              <div class="field-grid">
+                <div class="field-row">
+                  <div>
+                    <label class="lbl"><span class="k">seq_A</span> · str</label>
+                    <input id="seqA" type="text" value="ATCG" spellcheck="false" autocomplete="off">
+                  </div>
+                  <div>
+                    <label class="lbl"><span class="k">seq_B</span> · str</label>
+                    <input id="seqB" type="text" value="TCG" spellcheck="false" autocomplete="off">
+                  </div>
+                </div>
+                <div class="ex-row">
+                  <button type="button" class="pill" id="dnaExample">dna_sample</button>
+                  <button type="button" class="pill" id="proteinExample">protein_sample</button>
+                </div>
+                <span class="hint">// A-Z, len ≤ 24, auto upper, strip ws</span>
+                <div class="err" id="inputErrors" role="status" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div class="ctl-cell">
+              <h3>scoring</h3>
+              <div class="field-grid">
+                <div class="scores">
+                  <div><label class="lbl"><span class="k">match</span></label><input id="matchScore" type="number" step="0.5" value="2"></div>
+                  <div><label class="lbl"><span class="k">mismatch</span></label><input id="mismatchScore" type="number" step="0.5" value="-1"></div>
+                  <div><label class="lbl"><span class="k">gap</span></label><input id="gapScore" type="number" step="0.5" value="-1"></div>
+                </div>
+                <div>
+                  <label class="lbl" for="speedRange"><span class="k">speed</span></label>
+                  <input id="speedRange" type="range" min="0" max="4" step="1" value="2">
+                  <div class="speed-row"><span>slow</span><span id="speedLabel">中 · 450ms</span><span>fast</span></div>
+                </div>
+                <label class="check" for="skipFill">
+                  <input id="skipFill" type="checkbox"> skip_fill = true
+                </label>
+              </div>
+            </div>
+
+            <div class="ctl-cell">
+              <h3>execution</h3>
+              <div class="row">
+                <button type="button" class="btn primary" id="runBtn">run</button>
+                <button type="button" class="btn" id="pauseBtn" disabled>‖ pause</button>
+                <button type="button" class="btn" id="stepBtn">↦ step</button>
+                <button type="button" class="btn danger" id="resetBtn">⨯ reset</button>
+              </div>
+              <p class="ctl-hint">
+                <span style="color:var(--dim)">// </span>step: 暂停态推进一格<br>
+                <span style="color:var(--dim)">// </span>run: 取消旧动画并从头开始<br>
+                <span style="color:var(--dim)">// </span>线性 gap, tie-break: ↖↑←∅
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- matrix -->
+        <div class="sec"><b>§ 02</b><span>// memory view · H[i][j]</span></div>
+        <div class="matrix-block">
+          <div class="legend" aria-label="图例">
+            <span class="legend-item"><span class="sw cur"></span>current</span>
+            <span class="legend-item"><span class="sw dep"></span>dependencies</span>
+            <span class="legend-item"><span class="sw tr"></span>traceback</span>
+            <span class="legend-item"><span class="sw mx"></span>max ★</span>
+          </div>
+          <div class="matrix-scroll" id="matrixScroll">
+            <div class="matrix-wrap" id="matrixWrap">
+              <svg class="trace-overlay" id="traceOverlay" aria-hidden="true"></svg>
+              <div id="matrixHost"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- preview -->
+        <div class="sec"><b>§ 03</b><span>// traceback &amp; alignment</span></div>
+        <section class="panel preview">
+          <div class="panel-h">
+            <b>// traceback log</b>
+            <span class="preview-status" id="traceStatus">awaiting traceback</span>
+          </div>
+          <div class="panel-b">
+            <div class="context-box" id="sequenceContext">Sequence A: 等待运行
+Sequence B: 等待运行</div>
+            <div class="alignment-box" id="alignmentPreview">A:
+ 
+B:</div>
+          </div>
+        </section>
+
+        <!-- result -->
+        <div class="sec"><b>§ 04</b><span>// return value</span></div>
+        <section class="panel result-panel">
+          <div class="panel-h"><b>// align_local(A, B) → struct alignment</b><span class="copy-status" id="copyStatus"></span></div>
+          <div class="panel-b" id="resultHost">
+            <p class="explain"><span style="color:var(--dim)">// </span>结果将在回溯完成后输出。</p>
+          </div>
+        </section>
+      </main>
+
+      <!-- right rail: inspector -->
+      <aside class="right-rail">
+        <div class="pane">
+          <div class="pane-h"><b>// current step</b><span class="tag">live</span></div>
+          <div class="pane-b">
+            <div id="formulaPanel">
+              <p class="explain"><span style="color:var(--dim)">// </span>点击 <em>run</em> 或 <em>step</em> 开始。<br>填充阶段列出 <em>diag/up/left/zero</em>;回溯阶段显示 pointer 与追加字符。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pane">
+          <div class="pane-h"><b>// recurrence</b><span class="tag">readonly</span></div>
+          <div class="pane-b">
+            <pre style="margin:0;font-size:11.5px;line-height:1.7;color:var(--fg-2);white-space:pre-wrap"><span style="color:var(--magenta)">H</span>(i, j) = <span style="color:var(--blue)">max</span>{
+  <span style="color:var(--cyan)">0</span>,
+  H(i-1, j-1) + s(<span style="color:var(--green)">A</span><sub>i</sub>, <span style="color:var(--green)">B</span><sub>j</sub>),
+  H(i-1, j)   + <span style="color:var(--amber)">gap</span>,
+  H(i,   j-1) + <span style="color:var(--amber)">gap</span>
+}</pre>
+          </div>
+        </div>
+
+        <div class="pane">
+          <div class="pane-h"><b>// notes</b><span class="tag">ref</span></div>
+          <div class="pane-b">
+            <p class="explain"><span style="color:var(--dim)">// </span>tie-break 优先 <em>diag → up → left → none</em>。回溯从最高分单元格起,在 0 或边界停止。</p>
+            <p class="explain"><span style="color:var(--dim)">// </span>本演示为线性 gap。affine gap 需要额外 E/F 矩阵。</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- status bar -->
+    <div class="statusbar">
+      <span class="seg">⎇ <b>main</b></span>
+      <span class="seg">● <b style="color:var(--green)">clean</b></span>
+      <span class="seg">UTF-8</span>
+      <span></span>
+      <span class="seg">JetBrains Mono · 13px</span>
+      <span class="seg">© 1981 Smith–Waterman</span>
+    </div>
+  </div>
+
+  <div class="live-region" id="liveRegion" aria-live="polite"></div>
+  <script src="sw-core.js"></script>
+</body>
+</html>
