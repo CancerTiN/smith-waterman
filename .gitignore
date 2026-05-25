@@ -38,6 +38,7 @@ Test Results*.html
 .env.*
 !.env.example
 *.local
+.netlify/
 
 # Editors and IDEs
 .idea/
